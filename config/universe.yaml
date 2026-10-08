@@ -1,0 +1,8 @@
+# Coverage universe. To add or swap a company, edit this list and re-run
+# `python -m tracker.ingest fetch`. CIKs are looked up from SEC automatically.
+tickers:
+  - NVDA
+  - MSFT
+  - AAPL
+  - GOOGL
+  - ETN

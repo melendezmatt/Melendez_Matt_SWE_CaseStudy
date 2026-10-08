@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: tracker
+      POSTGRES_PASSWORD: tracker
+      POSTGRES_DB: tracker
+    ports:
+      - "5433:5432"   # 5433 on the host, so it doesn't clash with a local Postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tracker -d tracker"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://tracker:tracker@db:5432/tracker
+      SEC_USER_AGENT: ${SEC_USER_AGENT:-FundamentalsTracker research contact@example.com}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai/}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-gemini-3.7-flash}
+      ASK_TIMEOUT_SECONDS: ${ASK_TIMEOUT_SECONDS:-90}
+      ASK_CONCURRENCY: ${ASK_CONCURRENCY:-8}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data   # a live `fetch` writes the new snapshot back to the repo
+
+volumes:
+  pgdata:
