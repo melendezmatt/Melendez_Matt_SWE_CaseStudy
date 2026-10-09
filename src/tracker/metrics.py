@@ -4,7 +4,7 @@ Every number the API or the Q&A agent reports is computed here.
 """
 
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from enum import StrEnum
 
 from tracker.models import Fact, FiscalYear, RankingRow, Source
@@ -92,17 +92,30 @@ def annual_table(facts: list[Fact]) -> list[FiscalYear]:
     return table
 
 
+def calendar_year(period_end: date) -> int:
+    """The calendar year holding most of the fiscal year that ends on `period_end`: the year of its
+    midpoint. NVDA's FY2026 (Jan 2025 - Jan 2026) and MSFT's FY2026 (Jul 2025 - Jun 2026) are both
+    mostly 2025, so that's the year to compare them on, not the year their labels share."""
+    return (period_end - timedelta(days=182)).year
+
+
 def rank(
-    tables: dict[str, list[FiscalYear]], metric: Metric, fiscal_year: int | None = None
+    tables: dict[str, list[FiscalYear]],
+    metric: Metric,
+    fiscal_year: int | None = None,
+    in_calendar_year: int | None = None,
 ) -> list[RankingRow]:
-    """Every company ranked on one metric, highest first. With no fiscal_year, each company's
-    latest year with a value is used. Each row cites the filings behind that metric's inputs."""
+    """Every company ranked on one metric, highest first. Each company's latest year with a value
+    is used, limited to one fiscal-year label or to the fiscal year that falls mostly in one
+    calendar year. Each row cites the filings behind that metric's inputs."""
     rows = []
     for ticker, table in tables.items():
         years = [
             y
             for y in table
-            if getattr(y, metric) is not None and (fiscal_year is None or y.fiscal_year == fiscal_year)
+            if getattr(y, metric) is not None
+            and (fiscal_year is None or y.fiscal_year == fiscal_year)
+            and (in_calendar_year is None or calendar_year(y.period_end) == in_calendar_year)
         ]
         if years:
             latest = years[-1]

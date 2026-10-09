@@ -16,7 +16,7 @@ with the reason.
 | 6 | Postgres with a designed schema: fundamentals, filing text, prices | 6 tables; provenance on every number; CHECK constraints; full-text index on filing chunks | `schema.sql` | Loaded by every API test |
 | 7 | A seed/snapshot so review doesn't depend on live APIs | Committed snapshot, loaded on first start | `data/snapshot/`, `ingest seed --if-changed` | Every API test loads the snapshot, with no network calls |
 | 8 | FastAPI: a few well-structured endpoints for fundamentals, prices, derived metrics | `/companies`, `/fundamentals`, `/prices`, `/valuation`, `/rankings`, `/ask`, `/health`; one error shape | `api/`, `models.py`, `errors.py` | `tests/test_api.py` |
-| 9 | Reported: revenue, net income, EPS, gross margin, operating margin | Pivoted from XBRL; untagged subtotals derived and labelled | `xbrl.py`, `metrics.annual_table()` | `test_untagged_subtotals_are_derived_and_labelled`, `test_derived_values_say_how_they_were_derived` |
+| 9 | Reported: revenue, net income, EPS, gross margin, operating margin | Pivoted from XBRL; untagged subtotals derived and labelled | `xbrl.py`, `metrics.annual_table()` | `test_untagged_subtotals_are_derived_and_labelled`, `test_derived_values_say_how_they_were_derived`, `tests/test_snapshot.py` |
 | 10 | Derived: YoY growth and margins | Revenue / net income / EPS growth; gross and operating margin | `metrics.annual_table()` | `tests/test_metrics.py` |
 | 11 | One cross-source multiple (EDGAR + market) | Trailing P/E = latest close ÷ latest annual diluted EPS | `service.valuation()`, `metrics.trailing_pe()` | `test_aapl_trailing_pe_joins_latest_price_and_eps` |
 | 12 | An NL layer over numbers *and* text, more than chat: tool use / retrieval | Tool-calling agent with 5 tools over the same service layer as the API | `agent.py`, `tools.py` | `tests/test_agent.py`; [EXAMPLES.md](EXAMPLES.md) |
@@ -44,7 +44,8 @@ Full answers: [EXAMPLES.md](EXAMPLES.md).
 
 **Ingestion**
 - Live fetch from SEC XBRL company facts, SEC filing history + 10-K documents, and Yahoo Finance
-- XBRL clean-up: full-year facts only, latest filing wins (restatements, stock splits), fallback tags per year, derived subtotals with the formula recorded
+- XBRL clean-up: full-year facts only, latest filing wins (restatements, stock splits), fallback tags per year, zero-tagged values skipped, derived subtotals with the formula recorded (one definition per company across all years)
+- A warning at ingestion when a company's own 10-K labels its fiscal year differently from the calendar-year rule
 - 10-K section extraction for Item 1A and Item 7, robust to tables of contents, page footers and a relocated MD&A
 - Committed, gzipped snapshot (about 370 KB); `seed` loads it with no network access, and
   `seed --if-changed` (run on every start) reloads it whenever the committed snapshot changes
@@ -58,8 +59,8 @@ Full answers: [EXAMPLES.md](EXAMPLES.md).
 - `GET /companies/{ticker}/fundamentals?years=N`: reported values, margins, YoY growth, and the SEC source of each value
 - `GET /companies/{ticker}/prices?start=&end=`
 - `GET /companies/{ticker}/valuation`: trailing P/E with the price date and the EPS it used
-- `GET /rankings/{metric}?fiscal_year=`: every company ranked on one metric, with the SEC sources of that metric's inputs, so an analyst can check the agent's comparisons
-- `POST /ask`: answer, route, tool calls, sources, and any figures not found in a tool result
+- `GET /rankings/{metric}?fiscal_year=|calendar_year=`: every company ranked on one metric, with the SEC sources of that metric's inputs, so an analyst can check the agent's comparisons; `calendar_year` lines up companies whose fiscal years end in different months
+- `POST /ask`: answer, route, tool calls, sources (with EDGAR links and accession numbers in `source_refs`), and any figures not found in a tool result
 - One error shape for everything, including unknown routes and crashes: `{"error": {"code", "message", "request_id"}}`, documented in OpenAPI
 - Provider rate limits passed through as 429 with `Retry-After`
 - A time budget per question (504 when exceeded) and a cap on questions in flight (429), so slow LLM calls can't tie up every worker thread
@@ -69,15 +70,16 @@ Full answers: [EXAMPLES.md](EXAMPLES.md).
 **Q&A agent**
 - 5 tools: `get_fundamentals`, `compare_companies`, `get_valuation`, `search_filings`, `risk_factor_changes`
 - Numbers pre-formatted for the model; the model does no arithmetic
-- Risk factor year-over-year comparison done in code, sorted most novel first, with totals and paging so the model knows when it's seeing part of the list
+- Risk factor year-over-year comparison done in code, sorted most novel first, with totals and paging so the model knows when it's seeing part of the list; cached, so paging doesn't recompute it
+- Company comparisons report how far apart the fiscal years end, and tell the model to say so past six months
 - Filing search defaults to the latest 10-K and drops passages repeated from the prior year
-- Every figure in the answer checked against the tool results
+- Every figure in the answer checked against the tool results by kind and value (so a $B/$M slip or a % read as $ is caught, and rounding isn't); any not found are listed in a note at the end of the answer
 - Route and sources derived from the tools that ran
 - Tool errors (and crashes) returned to the model; a 6-round limit before a forced answer
 - A database connection is held only while a tool runs, never while waiting on the model
 
 **Quality**
-- 66 tests (unit tests without a database; API tests against the snapshot in Postgres, including `/ask` over HTTP with a fake model)
+- 90 tests (unit tests without a database; API tests against the snapshot in Postgres, including `/ask` over HTTP with a fake model)
 - A live evaluation, `pytest -m live`: the brief's six questions against the configured real model, checking route, tools, figures and the decline
 - Typed end to end: SQL rows map into Pydantic models, and mypy runs clean
 - `scripts/check.py`: lint, formatting, types, tests

@@ -1,10 +1,12 @@
-"""XBRL normalization: each of the four messy-data rules in xbrl.py, on small hand-made inputs."""
+"""XBRL normalization: each of the messy-data rules in xbrl.py, on small hand-made inputs."""
 
-from tracker.xbrl import normalize
+from tracker.xbrl import latest_reported_year, normalize
 
 
-def fact(start: str, end: str, val: float, filed: str, accn: str = "a1", form: str = "10-K") -> dict:
-    return {"start": start, "end": end, "val": val, "filed": filed, "form": form, "accn": accn}
+def fact(
+    start: str, end: str, val: float, filed: str, accn: str = "a1", form: str = "10-K", fy: int | None = None
+) -> dict:
+    return {"start": start, "end": end, "val": val, "filed": filed, "form": form, "accn": accn, "fy": fy}
 
 
 def company_facts(**tags: list[dict]) -> dict:
@@ -94,3 +96,42 @@ def test_fiscal_year_is_the_year_the_period_ends() -> None:
     # NVDA's year ending January 2025 is its FY2025.
     rows = normalize(company_facts(Revenues=[fact("2024-01-29", "2025-01-26", 130, "2025-02-26")]), "NVDA")
     assert rows[0]["fiscal_year"] == 2025
+
+
+def test_a_zero_is_not_reported_so_the_next_tag_is_used() -> None:
+    # ETN's 2013-2016 10-Ks tag Revenues as 0; the real figure is under SalesRevenueNet.
+    rows = normalize(
+        company_facts(
+            Revenues=[fact(*FY2024, 0, "2025-02-01")],
+            SalesRevenueNet=[fact(*FY2024, 220, "2025-02-01")],
+        ),
+        "X",
+    )
+    assert values(rows, "revenue") == {"2024-12-31": 220}
+
+
+def test_a_subtotal_untagged_in_any_year_is_derived_in_every_year() -> None:
+    # Tagged in 2023 but not 2024: both years use the formula, so the series has one definition.
+    fy2023 = ("2023-01-01", "2023-12-31")
+    rows = normalize(
+        company_facts(
+            Revenues=[fact(*fy2023, 900, "2024-02-01"), fact(*FY2024, 1000, "2025-02-01")],
+            CostOfRevenue=[fact(*fy2023, 500, "2024-02-01"), fact(*FY2024, 600, "2025-02-01")],
+            GrossProfit=[fact(*fy2023, 450, "2024-02-01")],
+        ),
+        "X",
+    )
+    assert values(rows, "gross_profit") == {"2023-12-31": 400, "2024-12-31": 400}
+    assert all(r["concept"].startswith("derived: ") for r in rows if r["metric"] == "gross_profit")
+
+
+def test_latest_reported_year_is_the_label_in_the_latest_10k() -> None:
+    # A retailer whose "fiscal 2024" ends in February 2025: the calendar-year label would say 2025.
+    facts = company_facts(
+        Revenues=[
+            fact("2023-02-01", "2024-02-03", 100, "2024-03-01", fy=2023),
+            fact("2024-02-04", "2025-02-01", 110, "2025-03-01", fy=2024),
+            fact("2023-02-01", "2024-02-03", 100, "2025-03-01", fy=2024),  # comparative, same filing
+        ]
+    )
+    assert latest_reported_year(facts) == ("2025-02-01", 2024)

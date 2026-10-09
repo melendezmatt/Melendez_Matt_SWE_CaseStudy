@@ -73,12 +73,20 @@ there's one source of truth, and a formula fix takes effect without re-ingesting
   NVDA's EPS comes out on a post-split basis.
 - Companies change tags (GOOGL moved revenue to a new tag in 2023), so each metric has fallback
   tags, resolved year by year.
+- A full-year figure tagged as exactly zero is treated as not reported, so the next tag is used.
+  ETN's 2013–2016 10-Ks tag `Revenues` as 0; without this rule ETN showed $0 revenue for 2011–2016.
 - Untagged subtotals are derived and labelled `derived: <formula>`. GOOGL never tags gross profit,
-  and ETN never tags operating income. ETN's derived figure ties to its reported pretax income once
+  and ETN stopped tagging operating income in 2020. If any year needs deriving, every year is
+  derived, so a series never switches definition partway: ETN's tagged 2019 figure was $0.8B above
+  the formula's, which made its margin look like it halved in 2020. ETN's derived figure ties to its reported pretax income once
   interest and other income are added back.
 - A fiscal year is the calendar year it ends in, which is how all five companies label their
   years. I first used SEC's `fy` field. It turned out to describe the *filing*, not the period,
-  and produced duplicate years for GOOGL and early NVDA data, so I dropped it.
+  and produced duplicate years for GOOGL and early NVDA data, so I dropped it. It is still used
+  as a check: ingestion warns if a company's latest 10-K labels its year differently (a retailer
+  whose "fiscal 2024" ends in February 2025 would be labelled 2025 by this rule).
+- `tests/test_snapshot.py` checks the committed data itself: revenue positive, margins within
+  ±100%, one definition per subtotal per company.
 
 **10-K text** (`filings.py`): the HTML is flattened to one line per paragraph, and page
 headers/footers are removed. Each section is the longest stretch between its "Item" heading and the
@@ -107,9 +115,27 @@ including a tool that crashes, go back to the model so it can correct itself or 
 other tools, and after 6 rounds it must answer with what it has.
 
 **Grounding is checked, not just requested.** After the model answers, `grounding.py` pulls every
-figure out of the answer and looks for it in the tool results (by value, so `$130.50B` matches
-"130.5 billion"). Any it can't find are returned as `unverified_numbers` and logged. It flags
-rather than blocks: a model restating "$331.84B" as "$331,839 million" is flagged but not wrong.
+figure out of the answer and looks for it in the tool results by kind and value, not spelling.
+`$130.50B`, "$130.5 billion" and "$130,497 million" are the same amount; "$130.50 million",
+"130.5%" and "130.5x" are not, so a scale or unit slip (the most common way a model mangles a
+number it copies) is caught. Each figure stands for a range as wide as its last digit, so rounding
+("18%" for 17.8%) passes. Only tool results count as evidence, not the question, so a figure the
+user supplied isn't verified by being repeated back. Any it can't find are returned as
+`unverified_numbers`, logged, and listed in a note at the end of the answer, so the reader sees
+them. It flags rather than blocks. Known limit: a bare number in a filing passage matches any
+figure with the same digits, because 10-K tables state their units once in a header.
+
+**Every answer links to its filings.** `source_refs` lists each SEC filing behind the answer with
+its accession number and EDGAR link (and the Yahoo history page for prices). A fiscal year's
+figures can come from a later 10-K that restated them, and the link points to that filing, the
+one the number was actually taken from.
+
+**Comparisons say when the periods don't line up.** "Last year" means each company's latest fiscal
+year, and those can end nine months apart (AAPL in September, MSFT in June). `compare_companies`
+returns how far apart the period ends are and, beyond six months, tells the model it must say so.
+Fiscal-year labels are a trap for a named year: NVDA's "FY2025" ended in January 2025 and was
+mostly 2024. `calendar_year` (on the tool and on `/rankings`) picks each company's fiscal year
+whose midpoint falls in that year instead, which puts NVDA's FY2026 next to everyone else's 2025.
 
 **A slow LLM can't stall the rest of the API.** All routes run on one pool of worker threads, so
 two limits protect it. Each question has a time budget (`ASK_TIMEOUT_SECONDS`, default 90s) across
@@ -124,6 +150,8 @@ matches each paragraph to its closest counterpart in the prior year (overlap of 
 numbers ignored). The model only summarizes the unmatched ones. They're sorted most novel first and
 returned 20 at a time with the totals (NVDA's latest 10-K has 31 new paragraphs), so a cut-off list
 still leads with the biggest changes, and the model is told it's partial and can page for more.
+The comparison takes about 0.6s on NVDA and is cached by the section texts, so paging is free and
+a reload can't serve a stale result.
 
 **Filing search is Postgres full-text search, not embeddings.** It keeps everything in one database
 and doesn't assume the reviewer's proxy serves an embedding model. 10-K prose is keyword-heavy, and
@@ -148,8 +176,10 @@ Unedited answers from a real model are in [EXAMPLES.md](EXAMPLES.md).
 | One multiple (P/E) | No P/S: it needs share counts, which are messy for GOOGL's three share classes |
 | Keyword search, not semantic | Can miss paraphrases; pgvector would be a drop-in addition |
 | Pattern-based section extraction | Checked on these five companies; it logs and skips rather than storing wrong text |
-| Derived ETN operating income | Would be wrong for a company with other operating expense lines; labelled as derived |
-| Answer numbers are flagged, not blocked | A flagged figure can be a correct restatement; the analyst sees `unverified_numbers` and decides |
+| Derived ETN operating income | Would be wrong for a company with other operating expense lines; labelled as derived, and derived for every year so the series is consistent |
+| Fiscal year = calendar year the period ends in | Right for these five; ingestion warns when a new company's own 10-K labels its year differently, rather than relabelling |
+| Answer numbers are flagged, not blocked | A flagged figure can still be right; the answer ends with a note listing them, and the analyst decides |
+| Fiscal years compared as reported, not re-cut to calendar periods | Without quarterly data a June year can't be re-cut to December; instead the tool measures the gap, warns past six months, and offers `calendar_year` |
 | One Docker image for running and checking | It includes the dev tools and tests, so `docker compose run app python scripts/check.py` works; a production image would drop them |
 | No auth, scheduler, migrations or bonus dataset | Prototype scope; the time went into getting the three required sources right |
 

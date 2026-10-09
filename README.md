@@ -51,12 +51,14 @@ To add or swap a company, edit `config/universe.yaml` and run the same command.
 ## Running the checks
 
 ```bash
-docker compose run --rm app python scripts/check.py   # lint, formatting, types (mypy), all 66 tests
+docker compose run --rm app python scripts/check.py   # lint, formatting, types (mypy), all 90 tests
 ```
 
 - `test_xbrl.py`, `test_metrics.py`, `test_filings.py`, `test_narrative.py`, `test_grounding.py`
   and `test_tools.py` cover the data rules, the answer number check and the tool output on small
   hand-made inputs.
+- `test_snapshot.py` checks the committed data itself: positive revenue, margins within ±100%,
+  and one definition per subtotal per company.
 - `test_agent.py` covers routing and error handling with a scripted fake model (no API key).
 - `test_api.py` checks the API against the real snapshot, one test per question in the brief, plus
   `/ask` over HTTP with real tools and a fake model (swapped in with `dependency_overrides`).
@@ -92,8 +94,8 @@ example questions was run on `gemini-3.5-flash` instead (noted in [`docs/EXAMPLE
 | `GET` | `/companies/{ticker}/fundamentals?years=N` | Revenue, gross profit, operating income, net income, diluted EPS, margins and YoY growth per fiscal year, with the SEC source of each value |
 | `GET` | `/companies/{ticker}/prices?start=&end=` | Daily closes |
 | `GET` | `/companies/{ticker}/valuation` | Trailing P/E: latest close ÷ latest annual diluted EPS |
-| `GET` | `/rankings/{metric}?fiscal_year=` | Every company ranked on one metric, e.g. `/rankings/gross_margin` |
-| `POST` | `/ask` | An answer, the route taken, the tools called, sources, and any figures in the answer not found in a tool result (`unverified_numbers`) |
+| `GET` | `/rankings/{metric}?fiscal_year=` or `?calendar_year=` | Every company ranked on one metric, e.g. `/rankings/gross_margin`. `calendar_year` compares the fiscal years that fall mostly in that year, since labels can be almost a year apart |
+| `POST` | `/ask` | An answer, the route taken, the tools called, sources with EDGAR links (`source_refs`), and any figures in the answer not found in a tool result (`unverified_numbers`) |
 | `GET` | `/health` | `ok` if the database answers |
 
 Every error, including unknown routes and unexpected failures, has one shape, documented in the
@@ -161,7 +163,8 @@ project, and Claude helped me move faster.
   and the line between what the LLM does and what code does.
 - Scope: cutting a first, larger build down to this MVP (see [`docs/MVP.md`](docs/MVP.md)).
 - Checking the data against the 10-Ks, and catching the edge cases that needed rules: GOOGL's tag
-  change, ETN's missing operating income and relocated MD&A, NVDA's split-restated EPS.
+  change, ETN's zero-tagged revenue, missing operating income and relocated MD&A, NVDA's
+  split-restated EPS.
 - The final checks: all six example questions against a real model.
 
 **Where Claude helped:**
@@ -175,10 +178,15 @@ project, and Claude helped me move faster.
 - Filing search is keyword-based, so it can miss paraphrases.
 - Section extraction is pattern-based. It's checked on these five companies, and it logs and skips a
   section it can't find rather than storing the wrong text.
-- ETN's operating income is derived (gross profit − SG&A − R&D), which would be wrong for a company
-  with other operating expense lines.
-- The answer number check flags figures it can't find in a tool result; it doesn't block them,
-  and it also flags correct figures the model restated in other units.
+- ETN's operating income is derived (gross profit − SG&A − R&D) for every year, which would be
+  wrong for a company with other operating expense lines.
+- Fiscal years are labelled by the calendar year they end in. That's right for these five; for a
+  company that labels its years differently, ingestion logs a warning but doesn't relabel.
+- The answer number check flags figures it can't find in a tool result; it doesn't block them
+  (it adds a note to the answer). It's unit- and scale-aware, but a bare number in a 10-K passage
+  matches any figure with the same digits, since filing tables give their units once in a header.
+- Comparing companies on fiscal years that end in different months can't be fully fixed without
+  quarterly data; the agent is told how far apart the periods are and must say so.
 - No auth, no scheduled refresh, no migrations (the schema is applied on start).
 
 ## Project layout

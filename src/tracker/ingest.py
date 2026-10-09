@@ -42,8 +42,10 @@ def fetch(tickers: list[str]) -> dict[str, list[dict]]:
             snapshot["companies"].append({"ticker": ticker, "cik": cik, "name": name})
 
             log.info("%s: XBRL financials", ticker)
-            facts = xbrl.normalize(sec.company_facts(cik), ticker)
+            company_facts = sec.company_facts(cik)
+            facts = xbrl.normalize(company_facts, ticker)
             snapshot["fundamentals"] += facts
+            warn_if_fiscal_years_mislabelled(ticker, company_facts)
 
             # Label each 10-K with the fiscal year it reports, using the same labels as the numbers.
             fiscal_year = {f["period_end"]: f["fiscal_year"] for f in facts if f["metric"] == "revenue"}
@@ -75,6 +77,22 @@ def fetch(tickers: list[str]) -> dict[str, list[dict]]:
     finally:
         sec.close()
     return snapshot
+
+
+def warn_if_fiscal_years_mislabelled(ticker: str, company_facts: dict) -> None:
+    """Fiscal years are labelled by the calendar year they end in (see xbrl.py). That matches how
+    the covered companies label theirs, but not every company: flag one that doesn't."""
+    reported = xbrl.latest_reported_year(company_facts)
+    if reported and int(reported[0][:4]) != reported[1]:
+        end, fy = reported
+        log.warning(
+            "%s: its latest 10-K calls the year ending %s FY%s, but it is labelled FY%s here; "
+            "fiscal-year labels for this company will be off",
+            ticker,
+            end,
+            fy,
+            end[:4],
+        )
 
 
 def write_snapshot(snapshot: dict[str, list[dict]], directory: Path) -> None:

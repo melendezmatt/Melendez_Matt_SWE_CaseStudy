@@ -4,16 +4,18 @@ Numbers are formatted here ("$130.50B", "71.1%") so the model copies them instea
 raw figures itself, which is where LLMs most often get numbers wrong.
 
 Every tool has the same signature, (conn, sources, **arguments from the model), and appends a
-citation to `sources` for each piece of data it returns, so citations come from the data.
+citation to `sources` for each filing it returns data from, so citations come from the data.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 
 from tracker import service
 from tracker.db import DbConnection
 from tracker.filings import SECTION_TITLES
 from tracker.metrics import Metric
+from tracker.models import SourceRef
+from tracker.sec import filing_index_url
 
 NUMBERS, FILINGS = "numbers", "filings"
 
@@ -50,18 +52,27 @@ FIELD_FORMATS: dict[str, Callable[[float | None], str | None]] = {
 }
 
 
-def xbrl_source(ticker: str, fiscal_year: int | None) -> str:
-    return f"{ticker} FY{fiscal_year} 10-K financial data (SEC XBRL)"
+def xbrl_sources(ticker: str, cik: int, fiscal_year: int, accessions: Iterable[str]) -> list[SourceRef]:
+    """One citation per filing behind a fiscal year's figures. An older year's figures usually
+    come from a later 10-K, which restates them."""
+    label = f"{ticker} FY{fiscal_year} 10-K financial data (SEC XBRL)"
+    return [
+        SourceRef(label=label, url=filing_index_url(cik, accession), accession=accession)
+        for accession in sorted(set(accessions))
+    ]
 
 
-def filing_source(ticker: str, fiscal_year: int | None, section: str) -> str:
-    return f"{ticker} FY{fiscal_year} 10-K, {SECTION_TITLES[section]}"
+def filing_source(ticker: str, fiscal_year: int | None, section: str, accession: str, url: str) -> SourceRef:
+    label = f"{ticker} FY{fiscal_year} 10-K, {SECTION_TITLES[section]}"
+    return SourceRef(label=label, url=url, accession=accession)
 
 
 # ---- tools ---------------------------------------------------------------------------------
 
 
-def get_fundamentals(conn: DbConnection, sources: list[str], tickers: list[str], years: int = 3) -> dict:
+def get_fundamentals(
+    conn: DbConnection, sources: list[SourceRef], tickers: list[str], years: int = 3
+) -> dict:
     out = {}
     for ticker in tickers:
         data = service.fundamentals(conn, ticker, years)
@@ -74,19 +85,49 @@ def get_fundamentals(conn: DbConnection, sources: list[str], tickers: list[str],
             }
             for y in data.fiscal_years
         ]
-        sources += [xbrl_source(symbol, y.fiscal_year) for y in data.fiscal_years]
+        for y in data.fiscal_years:
+            accessions = (s.accession for s in y.sources.values())
+            sources += xbrl_sources(symbol, data.company.cik, y.fiscal_year, accessions)
     return out
 
 
+# Fiscal years ending further apart than this aren't the same period, and the answer must say so.
+ALIGNED_DAYS = 183
+
+
 def compare_companies(
-    conn: DbConnection, sources: list[str], metric: str, fiscal_year: int | None = None
+    conn: DbConnection,
+    sources: list[SourceRef],
+    metric: str,
+    fiscal_year: int | None = None,
+    calendar_year: int | None = None,
 ) -> dict:
-    rows = service.ranking(conn, metric, fiscal_year)
-    sources += [xbrl_source(r.ticker, r.fiscal_year) for r in rows]
+    rows = service.ranking(conn, metric, fiscal_year, calendar_year)
+    cik = {c.ticker: c.cik for c in service.companies(conn)}
+    for r in rows:
+        accessions = (s.accession for s in r.sources.values())
+        sources += xbrl_sources(r.ticker, cik[r.ticker], r.fiscal_year, accessions)
+    if fiscal_year:
+        basis = f"fiscal years labelled {fiscal_year}"
+    elif calendar_year:
+        basis = f"each company's fiscal year that falls mostly in calendar {calendar_year}"
+    else:
+        basis = "each company's latest fiscal year"
+    ends = [r.period_end for r in rows]
+    span = (max(ends) - min(ends)).days if ends else 0
+    if span > ALIGNED_DAYS:
+        note = (
+            f"These fiscal years end up to {span} days apart ({min(ends)} to {max(ends)}), so they "
+            "are not the same period. Say so in the answer, with each company's period_end. For a "
+            "named year, calendar_year lines the years up better than fiscal_year."
+        )
+    else:
+        note = "fiscal years end on different dates for each company; see period_end"
     return {
         "metric": metric,
-        "basis": f"fiscal year {fiscal_year}" if fiscal_year else "each company's latest fiscal year",
-        "note": "fiscal years end on different dates for each company; see period_end",
+        "basis": basis,
+        "period_ends_span_days": span,
+        "note": note,
         "ranking": [
             {
                 "rank": rank,
@@ -100,12 +141,15 @@ def compare_companies(
     }
 
 
-def get_valuation(conn: DbConnection, sources: list[str], ticker: str) -> dict:
+def get_valuation(conn: DbConnection, sources: list[SourceRef], ticker: str) -> dict:
     v = service.valuation(conn, ticker)
-    sources += [
-        f"{v.ticker} closing price {v.price_date} (Yahoo Finance)",
-        xbrl_source(v.ticker, v.fiscal_year),
-    ]
+    sources.append(
+        SourceRef(
+            label=f"{v.ticker} closing price {v.price_date} (Yahoo Finance)",
+            url=f"https://finance.yahoo.com/quote/{v.ticker}/history/",
+        )
+    )
+    sources += xbrl_sources(v.ticker, service.company(conn, v.ticker).cik, v.fiscal_year, [v.eps_accession])
     return {
         "ticker": v.ticker,
         "trailing_pe": None if v.trailing_pe is None else f"{v.trailing_pe:.1f}x",
@@ -117,7 +161,7 @@ def get_valuation(conn: DbConnection, sources: list[str], ticker: str) -> dict:
 
 def search_filings(
     conn: DbConnection,
-    sources: list[str],
+    sources: list[SourceRef],
     query: str,
     tickers: list[str] | None = None,
     section: str | None = None,
@@ -126,25 +170,29 @@ def search_filings(
 ) -> dict:
     passages = []
     for hit in service.search_filings(conn, query, tickers, section, fiscal_year, all_years):
-        source = filing_source(hit.ticker, hit.fiscal_year, hit.section)
+        source = filing_source(hit.ticker, hit.fiscal_year, hit.section, hit.accession, hit.url)
         sources.append(source)
-        passages.append({"source": source, "text": hit.text})
+        passages.append({"source": source.label, "text": hit.text})
     return {"query": query, "passages": passages or "no matching passages"}
 
 
-# Paragraphs returned per call, per list. Each list is ordered most novel first.
-PAGE_SIZES = {"new": 20, "changed": 5, "removed": 5}
+# Paragraphs returned per call, per list. Each list is ordered most novel first. One size for all
+# three lists, so one `offset` pages through each of them without skipping any.
+PAGE_SIZE = 20
 
 
-def risk_factor_changes(conn: DbConnection, sources: list[str], ticker: str, offset: int = 0) -> dict:
+def risk_factor_changes(conn: DbConnection, sources: list[SourceRef], ticker: str, offset: int = 0) -> dict:
     if offset < 0:
         raise ValueError("offset must be 0 or more")
     changes = service.risk_factor_changes(conn, ticker)
     latest, prior = changes.latest.fiscal_year, changes.prior.fiscal_year
-    sources += [filing_source(changes.ticker, fy, "risk_factors") for fy in (latest, prior)]
+    sources += [
+        filing_source(changes.ticker, filing.fiscal_year, "risk_factors", filing.accession, filing.url)
+        for filing in (changes.latest, changes.prior)
+    ]
     lists = {"new": changes.new, "changed": changes.changed, "removed": changes.removed}
-    pages = {name: paras[offset : offset + PAGE_SIZES[name]] for name, paras in lists.items()}
-    truncated = any(offset + PAGE_SIZES[name] < len(paras) for name, paras in lists.items())
+    pages = {name: paras[offset : offset + PAGE_SIZE] for name, paras in lists.items()}
+    truncated = any(offset + PAGE_SIZE < len(paras) for paras in lists.values())
     return {
         "ticker": changes.ticker,
         "comparing": f"FY{latest} 10-K vs FY{prior} 10-K",
@@ -193,7 +241,6 @@ class Tool:
 
 TICKER = {"type": "string", "description": 'e.g. "NVDA"'}
 TICKERS = {"type": "array", "items": {"type": "string"}, "description": 'e.g. ["NVDA"]'}
-FISCAL_YEAR = {"type": "integer", "description": "Omit for the latest"}
 
 TOOLS = {
     tool.run.__name__: tool
@@ -212,8 +259,17 @@ TOOLS = {
         Tool(
             compare_companies,
             NUMBERS,
-            "Rank every covered company on one metric. Use for 'which company had the highest ...'.",
-            {"metric": {"type": "string", "enum": list(Metric)}, "fiscal_year": FISCAL_YEAR},
+            "Rank every covered company on one metric. Use for 'which company had the highest ...'. "
+            "Omit both years for each company's latest fiscal year ('last year'). For a named year, "
+            "prefer calendar_year: fiscal-year labels can be almost a year apart across companies.",
+            {
+                "metric": {"type": "string", "enum": list(Metric)},
+                "fiscal_year": {"type": "integer", "description": "Compare fiscal years with this label"},
+                "calendar_year": {
+                    "type": "integer",
+                    "description": "Compare each company's fiscal year that falls mostly in this year",
+                },
+            },
             ("metric",),
         ),
         Tool(

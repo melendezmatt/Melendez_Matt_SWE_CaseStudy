@@ -8,7 +8,8 @@ What the LLM does:
 What the LLM does not do (it's all plain code):
   - any arithmetic (metrics.py), the risk-factor comparison (narrative.py)
   - the reported route and sources, which come from the tools that actually ran
-  - checking the answer's numbers against the tool results (grounding.py)
+  - checking the answer's numbers against the tool results, and telling the reader in the answer
+    when one isn't there (grounding.py)
 """
 
 import json
@@ -23,7 +24,7 @@ from tracker import grounding, service
 from tracker.config import Settings
 from tracker.db import DbConnection
 from tracker.errors import AppError, LLMRateLimited, LLMTimeout, LLMUnavailable
-from tracker.models import Answer, Route, ToolCall
+from tracker.models import Answer, Route, SourceRef, ToolCall
 from tracker.tools import FILINGS, NUMBERS, TOOLS
 
 log = logging.getLogger(__name__)
@@ -141,9 +142,11 @@ def ask(model: ChatModel, pool: ConnectionPool, question: str, timeout: float = 
     messages = [{"role": "system", "content": system_prompt(pool)}, {"role": "user", "content": question}]
     schemas = [tool.schema for tool in TOOLS.values()]
     calls: list[ToolCall] = []
-    sources: list[str] = []
+    sources: list[SourceRef] = []
     used: set[str] = set()
-    evidence = [question]  # everything the answer may take numbers from
+    # Everything the answer may take numbers from: tool results only. Not the question, so a
+    # figure the user supplied ("was revenue $500B?") isn't verified by being repeated back.
+    evidence: list[str] = []
 
     for _ in range(MAX_ROUNDS):
         reply = model.complete(messages, schemas, time_left())
@@ -168,11 +171,13 @@ def ask(model: ChatModel, pool: ConnectionPool, question: str, timeout: float = 
     unverified = grounding.unverified_numbers(answer, evidence)
     if unverified:
         log.warning("answer has numbers not found in any tool result: %s", unverified)
+        answer = f"{answer}\n\n{grounding.caveat(unverified)}"
     return Answer(
         answer=answer,
         route=route(used),
         tool_calls=calls,
-        sources=list(dict.fromkeys(sources)),  # de-duplicated, in order
+        sources=list(dict.fromkeys(s.label for s in sources)),  # de-duplicated, in order
+        source_refs=list(dict.fromkeys(sources)),
         unverified_numbers=unverified,
     )
 
@@ -189,7 +194,7 @@ def assistant_message(reply: dict) -> dict:
     }
 
 
-def run_tool(pool: ConnectionPool, sources: list[str], name: str, arguments: str) -> tuple[dict, bool]:
+def run_tool(pool: ConnectionPool, sources: list[SourceRef], name: str, arguments: str) -> tuple[dict, bool]:
     """Run one tool on its own connection. Errors go back to the model as text, so it can fix its
     call or say it can't answer, instead of the whole request failing."""
     if name not in TOOLS:

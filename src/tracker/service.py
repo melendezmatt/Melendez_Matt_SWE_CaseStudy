@@ -4,6 +4,7 @@ report different numbers. SQL lives here and returns typed models; math lives in
 import re
 from collections import defaultdict
 from datetime import date
+from functools import lru_cache
 from typing import Any, TypeVar
 
 from psycopg.rows import class_row
@@ -128,14 +129,18 @@ def valuation(conn: DbConnection, ticker: str) -> Valuation:
     )
 
 
-def ranking(conn: DbConnection, metric: str, fiscal_year: int | None = None) -> list[RankingRow]:
+def ranking(
+    conn: DbConnection, metric: str, fiscal_year: int | None = None, calendar_year: int | None = None
+) -> list[RankingRow]:
     """Every company ranked on one metric, highest first (see metrics.rank). Fiscal years end on
     different dates, so each row carries period_end."""
     try:
         valid = metrics.Metric(metric)
     except ValueError:
         raise InvalidInput(f"metric must be one of {', '.join(metrics.Metric)}") from None
-    return metrics.rank(annual_tables(conn), valid, fiscal_year)
+    if fiscal_year is not None and calendar_year is not None:
+        raise InvalidInput("give fiscal_year or calendar_year, not both")
+    return metrics.rank(annual_tables(conn), valid, fiscal_year, calendar_year)
 
 
 def search_filings(
@@ -162,7 +167,7 @@ def search_filings(
         conn,
         Passage,
         """
-        SELECT f.ticker, f.fiscal_year, f.url, c.section, c.text, ts_rank_cd(c.tsv, q) AS score
+        SELECT f.ticker, f.fiscal_year, accession, f.url, c.section, c.text, ts_rank_cd(c.tsv, q) AS score
         FROM filing_chunks c
         JOIN filings f USING (accession),
              to_tsquery('english', %(q)s) q
@@ -194,6 +199,12 @@ class RiskFactorText(FilingRef):
     text: str
 
 
+# Comparing two large Item 1As takes about half a second, and the text only changes when a new
+# snapshot is loaded, so repeat calls (paging through the results, say) reuse the result. Keyed by
+# the texts themselves, so a reload can never be served a stale comparison.
+compare_sections = lru_cache(maxsize=16)(narrative.compare_sections)
+
+
 def risk_factor_changes(conn: DbConnection, ticker: str) -> RiskFactorChanges:
     """What changed in Item 1A between the company's two latest 10-Ks."""
     co = company(conn, ticker)
@@ -201,7 +212,7 @@ def risk_factor_changes(conn: DbConnection, ticker: str) -> RiskFactorChanges:
         conn,
         RiskFactorText,
         """
-        SELECT f.fiscal_year, f.url, s.text FROM filings f
+        SELECT f.fiscal_year, accession, f.url, s.text FROM filings f
         JOIN filing_sections s USING (accession)
         WHERE f.ticker = %s AND s.section = 'risk_factors'
         ORDER BY f.filed DESC LIMIT 2
@@ -213,7 +224,7 @@ def risk_factor_changes(conn: DbConnection, ticker: str) -> RiskFactorChanges:
     latest, prior = filings
     return RiskFactorChanges(
         ticker=co.ticker,
-        latest=FilingRef(fiscal_year=latest.fiscal_year, url=latest.url),
-        prior=FilingRef(fiscal_year=prior.fiscal_year, url=prior.url),
-        **narrative.compare_sections(latest.text, prior.text),
+        latest=FilingRef(fiscal_year=latest.fiscal_year, accession=latest.accession, url=latest.url),
+        prior=FilingRef(fiscal_year=prior.fiscal_year, accession=prior.accession, url=prior.url),
+        **compare_sections(latest.text, prior.text),
     )

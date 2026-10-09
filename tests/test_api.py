@@ -68,6 +68,19 @@ def test_ranking_for_one_fiscal_year(client: TestClient) -> None:
     assert ranking[0]["ticker"] == "AAPL"
 
 
+def test_ranking_by_calendar_year_compares_the_years_that_overlap(client: TestClient) -> None:
+    # NVDA's FY2025 ended 2025-01-26, so it was mostly 2024. Its 2025 is FY2026.
+    by_label = ok(client.get("/rankings/gross_margin", params={"fiscal_year": 2025}))
+    by_calendar = ok(client.get("/rankings/gross_margin", params={"calendar_year": 2025}))
+    assert next(r for r in by_label if r["ticker"] == "NVDA")["period_end"] == "2025-01-26"
+    assert next(r for r in by_calendar if r["ticker"] == "NVDA")["period_end"] == "2026-01-25"
+
+
+def test_ranking_takes_one_kind_of_year_at_a_time(client: TestClient) -> None:
+    response = client.get("/rankings/revenue", params={"fiscal_year": 2025, "calendar_year": 2025})
+    assert response.status_code == 422 and error_code(response) == "VALIDATION_ERROR"
+
+
 # "What is AAPL's trailing P/E right now?"
 def test_aapl_trailing_pe_joins_latest_price_and_eps(client: TestClient) -> None:
     v = ok(client.get("/companies/AAPL/valuation"))
@@ -120,6 +133,9 @@ def test_ask_runs_real_tools_and_reports_the_route(app: FastAPI, client: TestCli
     assert answer["route"] == "numbers"
     assert answer["tool_calls"] == [{"tool": "get_valuation", "arguments": '{"ticker": "AAPL"}', "ok": True}]
     assert any("Yahoo Finance" in s for s in answer["sources"])
+    eps_filing = ok(client.get("/companies/AAPL/valuation"))["eps_accession"]
+    linked = {r["accession"]: r["url"] for r in answer["source_refs"]}
+    assert linked[eps_filing].startswith("https://www.sec.gov/Archives/edgar/data/320193/")
     assert answer["unverified_numbers"] == []  # 45.1x is in the tool result
     tool_result = model.requests[1]["messages"][-1]["content"]
     assert '"eps_diluted": "$7.46' in tool_result  # the real tool ran against the snapshot

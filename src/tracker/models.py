@@ -111,6 +111,7 @@ class Passage(Model):
 
     ticker: str
     fiscal_year: int | None
+    accession: str
     url: str
     section: str
     text: str
@@ -119,6 +120,7 @@ class Passage(Model):
 
 class FilingRef(Model):
     fiscal_year: int | None
+    accession: str
     url: str
 
 
@@ -147,12 +149,25 @@ class ToolCall(Model):
 Route = Literal["numbers", "filings", "both", "none"]
 
 
+class SourceRef(Model):
+    """Where data in an answer came from, with a link an analyst can open."""
+
+    label: str = Field(examples=["NVDA FY2026 10-K financial data (SEC XBRL)"])
+    url: str = Field(description="The SEC filing (or price history) the data came from")
+    accession: str | None = Field(default=None, description="SEC accession number; none for prices")
+
+
 class Answer(Model):
     answer: str
     route: Route = Field(description="Which data the answer used, from the tools that actually ran")
     tool_calls: list[ToolCall]
-    sources: list[str]
+    sources: list[str] = Field(description="What the answer drew on, one line each")
+    source_refs: list[SourceRef] = Field(
+        description="The same sources with links: one per filing the data came from. A fiscal year's "
+        "figures can come from a later 10-K, which restates prior years."
+    )
     unverified_numbers: list[str] = Field(
         description="Figures in the answer that appear in no tool result: possibly calculated, "
-        "converted or invented by the model. Empty when every figure was found."
+        "converted or invented by the model. When not empty, the answer ends with a note listing "
+        "them. Empty when every figure was found."
     )

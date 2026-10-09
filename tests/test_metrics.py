@@ -4,7 +4,7 @@ from datetime import date
 
 import pytest
 
-from tracker.metrics import Metric, annual_table, rank, trailing_pe
+from tracker.metrics import Metric, annual_table, calendar_year, rank, trailing_pe
 from tracker.models import Fact, Source
 
 
@@ -70,6 +70,31 @@ def test_a_company_without_revenue_can_still_be_ranked() -> None:
     assert [r.ticker for r in ranking] == ["BANK", "X"]
     assert set(ranking[0].sources) == {"net_income"}
     assert [r.ticker for r in rank(tables, Metric.GROSS_MARGIN)] == ["X"]  # no margin, so not ranked
+
+
+def test_a_fiscal_year_belongs_to_the_calendar_year_most_of_it_falls_in() -> None:
+    assert calendar_year(date(2026, 1, 25)) == 2025  # NVDA FY2026: Jan 2025 - Jan 2026
+    assert calendar_year(date(2026, 6, 30)) == 2025  # MSFT FY2026: Jul 2025 - Jun 2026
+    assert calendar_year(date(2025, 9, 27)) == 2025  # AAPL FY2025: Oct 2024 - Sep 2025
+    assert calendar_year(date(2025, 12, 31)) == 2025
+
+
+def test_ranking_by_calendar_year_lines_up_different_year_ends() -> None:
+    # A January year-end labelled 2025 ran through 2024; the one labelled 2026 is the 2025 year.
+    january = annual_table(rows("2025-01-26", net_income=1) + rows("2026-01-25", net_income=2))
+    december = annual_table(rows("2025-12-31", net_income=3))
+    tables = {"JAN": january, "DEC": december}
+    assert {
+        r.ticker: r.period_end.isoformat() for r in rank(tables, Metric.NET_INCOME, fiscal_year=2025)
+    } == {
+        "JAN": "2025-01-26",
+        "DEC": "2025-12-31",
+    }
+    by_calendar = rank(tables, Metric.NET_INCOME, in_calendar_year=2025)
+    assert {r.ticker: r.period_end.isoformat() for r in by_calendar} == {
+        "JAN": "2026-01-25",
+        "DEC": "2025-12-31",
+    }
 
 
 def test_trailing_pe() -> None:

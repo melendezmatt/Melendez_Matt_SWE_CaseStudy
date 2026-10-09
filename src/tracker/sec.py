@@ -8,6 +8,7 @@ TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 COMPANY_FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"
 SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik:010d}.json"
 DOCUMENT_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{folder}/{document}"
+FILING_INDEX_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{folder}/{accession}-index.htm"
 
 # SEC allows 10 requests a second; pausing between requests keeps us well under that.
 PAUSE_SECONDS = 0.2
@@ -15,6 +16,11 @@ PAUSE_SECONDS = 0.2
 
 def document_url(cik: int, accession: str, document: str) -> str:
     return DOCUMENT_URL.format(cik=cik, folder=accession.replace("-", ""), document=document)
+
+
+def filing_index_url(cik: int, accession: str) -> str:
+    """The filing's index page on EDGAR: its documents, including the XBRL the figures came from."""
+    return FILING_INDEX_URL.format(cik=cik, folder=accession.replace("-", ""), accession=accession)
 
 
 class SecClient:

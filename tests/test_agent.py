@@ -10,6 +10,7 @@ from fakes import FakeModel, calls, says
 
 from tracker import agent
 from tracker.errors import LLMTimeout
+from tracker.models import SourceRef
 from tracker.tools import FILINGS, NUMBERS, Tool
 
 
@@ -30,13 +31,17 @@ class FakePool:
             self.open -= 1
 
 
+XBRL = SourceRef(label="MSFT FY2026 10-K financial data (SEC XBRL)", url="https://sec/xbrl", accession="a1")
+MDNA = SourceRef(label="MSFT FY2026 10-K, Item 7 MD&A", url="https://sec/10k", accession="a1")
+
+
 def numbers(conn, sources):
-    sources.append("MSFT FY2026 10-K financial data (SEC XBRL)")
+    sources += [XBRL, XBRL]  # cited twice, listed once
     return {"revenue": "$331.84B"}
 
 
 def filings(conn, sources):
-    sources.append("MSFT FY2026 10-K, Item 7 MD&A")
+    sources.append(MDNA)
     return {"passages": ["Azure grew 34%."]}
 
 
@@ -69,6 +74,7 @@ def test_numbers_plus_narrative_question_routes_to_both() -> None:
         "MSFT FY2026 10-K financial data (SEC XBRL)",
         "MSFT FY2026 10-K, Item 7 MD&A",
     ]
+    assert result.source_refs == [XBRL, MDNA]  # with links, de-duplicated
     # each tool result went back to the model, matched to its call
     tool_messages = [m for m in model.requests[1]["messages"] if m["role"] == "tool"]
     assert [m["tool_call_id"] for m in tool_messages] == ["id-numbers", "id-filings"]
@@ -94,6 +100,7 @@ def test_out_of_scope_question_uses_no_data() -> None:
         "route": "none",
         "tool_calls": [],
         "sources": [],
+        "source_refs": [],
         "unverified_numbers": [],
     }
 
@@ -117,7 +124,20 @@ def test_a_crashing_tool_is_reported_to_the_model_not_the_caller() -> None:
 def test_numbers_missing_from_the_tool_results_are_flagged() -> None:
     model = FakeModel(calls("numbers"), says("Revenue was $331.84B, up 18.2% on $280.6B."))
     result = agent.ask(model, FakePool(), "MSFT revenue growth?")
-    assert result.unverified_numbers == ["18.2", "280.6"]  # $331.84B came from the tool
+    assert result.unverified_numbers == ["18.2%", "$280.6B"]  # $331.84B came from the tool
+    assert result.answer.endswith("verify them before relying on them: 18.2%, $280.6B.")
+
+
+def test_a_figure_from_the_question_is_not_evidence() -> None:
+    model = FakeModel(calls("numbers"), says("No: revenue was $331.84B, not $500B."))
+    result = agent.ask(model, FakePool(), "Was MSFT's revenue $500B?")
+    assert result.unverified_numbers == ["$500B"]
+
+
+def test_figures_in_an_answer_that_used_no_tools_are_all_flagged() -> None:
+    model = FakeModel(says("Next quarter's revenue should be about $85.2B."))
+    result = agent.ask(model, FakePool(), "What is the guidance for next quarter?")
+    assert result.route == "none" and result.unverified_numbers == ["$85.2B"]
 
 
 def test_each_model_call_gets_only_the_time_left() -> None:

@@ -39,8 +39,9 @@ def paragraphs(text: str) -> list[str]:
 
 
 def best_match_scores(paras: list[str], others: list[str]) -> list[float]:
+    # Each paragraph's phrases are computed once: inside the loop this took ~4s on NVDA's 10-K.
     other_phrases = [phrases(o) for o in others]
-    return [max((similarity(phrases(p), o) for o in other_phrases), default=0.0) for p in paras]
+    return [max((similarity(own, o) for o in other_phrases), default=0.0) for own in map(phrases, paras)]
 
 
 def most_novel_first(paras: list[str], scores: list[float], low: float, high: float) -> list[str]:
