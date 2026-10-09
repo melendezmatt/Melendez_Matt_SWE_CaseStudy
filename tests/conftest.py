@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from psycopg.rows import dict_row
 
 from tracker.config import get_settings
-from tracker.ingest import load, read_snapshot
+from tracker.ingest import fingerprint, load, read_snapshot
 
 sys.path.insert(0, str(Path(__file__).parent))  # so tests can `from fakes import ...`
 
@@ -22,7 +22,10 @@ def conn() -> Iterator[psycopg.Connection]:
         connection = psycopg.connect(get_settings().database_url, row_factory=dict_row, connect_timeout=5)
     except psycopg.OperationalError:
         pytest.skip("no Postgres at DATABASE_URL")
-    load(connection, read_snapshot(get_settings().snapshot_dir))
+    # Record the fingerprint too, so the database is left exactly as `seed` leaves it and the
+    # next `docker compose up` doesn't reload a snapshot it already holds.
+    snapshot_dir = get_settings().snapshot_dir
+    load(connection, read_snapshot(snapshot_dir), fingerprint(snapshot_dir))
     yield connection
     connection.close()
 
