@@ -1,0 +1,43 @@
+# Proves the README's one-command setup works on a clean machine: `docker compose up` brings up
+# Postgres and the app, the app seeds itself from the committed snapshot (no SEC or Yahoo access
+# needed), and every check runs inside the app container against that data.
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: docker compose up
+        run: docker compose up --build --detach
+
+      - name: Wait until the app is healthy (seeded and serving)
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent localhost:8000/health; then echo; exit 0; fi
+            sleep 2
+          done
+          echo "the app never became healthy"; exit 1
+
+      - name: Call the API the way the README does
+        run: |
+          curl --fail --silent localhost:8000/companies/AAPL/valuation; echo
+          curl --fail --silent "localhost:8000/rankings/gross_margin?calendar_year=2025"; echo
+          # No LLM key in CI: /ask must refuse cleanly with a 503, not crash.
+          status=$(curl --silent --output /dev/null --write-out '%{http_code}' localhost:8000/ask \
+            -H 'Content-Type: application/json' -d '{"question": "What is AAPL'"'"'s trailing P/E?"}')
+          test "$status" = 503
+
+      - name: Lint, formatting, types and all tests, inside the app container
+        run: docker compose exec -T app python scripts/check.py
+
+      - name: Logs
+        if: failure()
+        run: docker compose logs

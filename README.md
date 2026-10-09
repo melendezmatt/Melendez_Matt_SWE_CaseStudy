@@ -54,6 +54,10 @@ To add or swap a company, edit `config/universe.yaml` and run the same command.
 docker compose run --rm app python scripts/check.py   # lint, formatting, types (mypy), all 90 tests
 ```
 
+GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) does the same on every
+push from a clean machine: `docker compose up --build`, wait for `/health`, call the API, then run
+`scripts/check.py` inside the app container.
+
 - `test_xbrl.py`, `test_metrics.py`, `test_filings.py`, `test_narrative.py`, `test_grounding.py`
   and `test_tools.py` cover the data rules, the answer number check and the tool output on small
   hand-made inputs.
