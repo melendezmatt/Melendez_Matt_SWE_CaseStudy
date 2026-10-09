@@ -51,7 +51,7 @@ To add or swap a company, edit `config/universe.yaml` and run the same command.
 ## Running the checks
 
 ```bash
-docker compose run --rm app python scripts/check.py   # lint, formatting, types (mypy), all 91 tests
+docker compose run --rm app python scripts/check.py   # lint, formatting, types (mypy), all 96 tests
 ```
 
 GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) does the same on every
@@ -219,7 +219,8 @@ src/tracker/
   errors.py                                   the error types and their HTTP status codes
   config.py · db.py
 tests/        test_xbrl · test_metrics · test_filings · test_narrative · test_grounding · test_tools
-              test_agent · test_api · test_live (real-model evaluation, opt-in) · fakes
+              test_agent · test_snapshot (the committed data) · test_api (needs Postgres)
+              test_live (real-model evaluation, opt-in) · fakes
 scripts/      check.py (all checks) · ask_examples.py (the brief's questions)
 docs/         BRIEF.md · MVP.md · DESIGN.md · EXAMPLES.md
 data/         snapshot/ (committed data, ~370 KB)

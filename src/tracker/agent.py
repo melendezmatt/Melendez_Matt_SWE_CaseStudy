@@ -151,6 +151,9 @@ def ask(model: ChatModel, pool: ConnectionPool, question: str, timeout: float = 
     # Everything the answer may take numbers from: tool results only. Not the question, so a
     # figure the user supplied ("was revenue $500B?") isn't verified by being repeated back.
     evidence: list[str] = []
+    # Tools whose last result was cut off (the model stopped paging). The prompt tells the model to
+    # say so; this makes sure the reader is told even when it doesn't.
+    partial: dict[str, str] = {}
 
     for _ in range(MAX_ROUNDS):
         reply = model.complete(messages, schemas, time_left())
@@ -163,6 +166,10 @@ def ask(model: ChatModel, pool: ConnectionPool, question: str, timeout: float = 
             calls.append(ToolCall(tool=call["name"], arguments=call["arguments"], ok=ok))
             if ok:
                 used.add(TOOLS[call["name"]].category)
+                if result.get("truncated") and result.get("partial_note"):
+                    partial[call["name"]] = result["partial_note"]
+                else:
+                    partial.pop(call["name"], None)
             content = json.dumps(result, default=str)
             evidence.append(content)
             messages.append({"role": "tool", "tool_call_id": call["id"], "content": content})
@@ -176,6 +183,9 @@ def ask(model: ChatModel, pool: ConnectionPool, question: str, timeout: float = 
     if unverified:
         log.warning("answer has numbers not found in any tool result: %s", unverified)
         answer = f"{answer}\n\n{grounding.caveat(unverified)}"
+    for note in partial.values():
+        log.info("answer was written from a cut-off tool result; note appended")
+        answer = f"{answer}\n\nNote: {note}"
     return Answer(
         answer=answer,
         route=route(used),

@@ -53,6 +53,13 @@ def buggy(conn, sources):
     raise KeyError("revenue")  # a bug in a tool, not bad arguments
 
 
+def paged(conn, sources, offset=0):
+    """Two pages of results: the first is cut off, the second is the end."""
+    if offset == 0:
+        return {"items": ["a"], "truncated": True, "partial_note": "This covers 1 of 2 items."}
+    return {"items": ["b"], "truncated": False, "partial_note": None}
+
+
 @pytest.fixture(autouse=True)
 def stub_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     stubs = [
@@ -60,6 +67,7 @@ def stub_tools(monkeypatch: pytest.MonkeyPatch) -> None:
         Tool(filings, FILINGS, "", {}, ()),
         Tool(broken, NUMBERS, "", {}, ()),
         Tool(buggy, NUMBERS, "", {}, ()),
+        Tool(paged, FILINGS, "", {}, ()),
     ]
     monkeypatch.setattr(agent, "TOOLS", {tool.run.__name__: tool for tool in stubs})
     monkeypatch.setattr(agent, "system_prompt", lambda pool: "system prompt")
@@ -202,6 +210,19 @@ def test_the_model_turn_sent_back_keeps_tool_call_extras_but_drops_provider_fiel
     raw = model.complete([], None, timeout=5)["raw"]
     assert set(raw) == {"role", "tool_calls"}  # content was None; reasoning dropped
     assert raw["tool_calls"][0]["extra_content"] == {"google": {"thought_signature": "sig"}}
+
+
+def test_stopping_on_a_cut_off_result_adds_a_note_for_the_reader() -> None:
+    # A real model (Gemini 3.5 through a gateway) summarized the first page as if it were everything.
+    model = FakeModel(calls("paged"), says("The changes are: a."))
+    result = agent.ask(model, FakePool(), "What changed?")
+    assert result.answer == "The changes are: a.\n\nNote: This covers 1 of 2 items."
+
+
+def test_paging_to_the_end_needs_no_note() -> None:
+    model = FakeModel(calls("paged"), calls("paged", arguments='{"offset": 1}'), says("a and b."))
+    result = agent.ask(model, FakePool(), "What changed?")
+    assert result.answer == "a and b."
 
 
 def test_a_null_argument_means_use_the_tools_default() -> None:

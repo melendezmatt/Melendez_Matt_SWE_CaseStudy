@@ -27,6 +27,10 @@ def test_a_cut_off_risk_factor_list_says_so_and_gives_totals() -> None:
     assert out["totals"] == {"new": 31, "changed": 3, "removed": 0}
     assert out["truncated"] is True and len(out["new_paragraphs"]) == 20
     assert "Only part" in out["note"]
+    assert out["partial_note"] == (
+        "This covers the 20 most changed of 31 new, 3 rewritten and 0 removed risk factor "
+        "paragraphs in NVDA's latest 10-K; ask for more to see the rest."
+    )
 
 
 @pytest.mark.usefixtures("changes")

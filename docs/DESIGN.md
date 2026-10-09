@@ -190,7 +190,10 @@ numbers ignored). The model only summarizes the unmatched ones. They're sorted m
 returned 20 at a time with the totals (NVDA's latest 10-K has 31 new paragraphs), so a cut-off list
 still leads with the biggest changes, and the model is told it's partial and can page for more.
 The comparison takes about 0.6s on NVDA and is cached by the section texts, so paging is free and
-a reload can't serve a stale result.
+a reload can't serve a stale result. Saying "this is partial" is also enforced, not just requested:
+if the model stops on a cut-off page, the agent appends a note with the totals (Gemini 3.5 through
+a gateway summarized the first 20 of 31 new paragraphs as if they were all of them; Gemini 3.7 and
+Nemotron paged or said so unprompted).
 
 **Filing search is Postgres full-text search, not embeddings.** It keeps everything in one database
 and doesn't assume the reviewer's proxy serves an embedding model. 10-K prose is keyword-heavy, and

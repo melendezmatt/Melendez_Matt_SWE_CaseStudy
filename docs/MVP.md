@@ -22,7 +22,7 @@ with the reason.
 | 12 | An NL layer over numbers *and* text, more than chat: tool use / retrieval | Tool-calling agent with 5 tools over the same service layer as the API | `agent.py`, `tools.py` | `tests/test_agent.py`; [EXAMPLES.md](EXAMPLES.md) |
 | 13 | **Routing**: numbers, filing text, or both | The model picks tools; the response reports `route` from the tools that actually ran | `agent.route()` | `test_numbers_plus_narrative_question_routes_to_both`; `pytest -m live` checks the route of all six questions against a real model |
 | 14 | Decline out-of-scope questions instead of inventing | Coverage and limits in the system prompt; grounding rules | `agent.SYSTEM_PROMPT`; `grounding.py` flags figures not found in any tool result | `pytest -m live` (forward guidance: no tool calls); `tests/test_grounding.py` |
-| 15 | LLM base URL, key and model from env vars, never hardcoded | Any OpenAI-compatible endpoint | `config.py`, `.env.example` | `test_ask_without_a_configured_model_is_a_clear_503` |
+| 15 | LLM base URL, key and model from env vars, never hardcoded | Any OpenAI-compatible endpoint; verified live on Google AI Studio, Groq and OpenRouter | `config.py`, `.env.example` | `test_ask_without_a_configured_model_is_a_clear_503` |
 | 16 | `docker compose up` brings up the whole stack | App + Postgres; seeds itself on first start | `Dockerfile`, `docker-compose.yml` | Manual run (see README) |
 | 17 | README: run command, env vars, provider/model, 2–3 example interactions | | `README.md` | |
 | 18 | 1–2 page design writeup | Architecture, source integration, where the LLM is and isn't, trade-offs and cuts | `docs/DESIGN.md` | |
@@ -70,7 +70,7 @@ Full answers: [EXAMPLES.md](EXAMPLES.md).
 **Q&A agent**
 - 5 tools: `get_fundamentals`, `compare_companies`, `get_valuation`, `search_filings`, `risk_factor_changes`
 - Numbers pre-formatted for the model; the model does no arithmetic
-- Risk factor year-over-year comparison done in code, sorted most novel first, with totals and paging so the model knows when it's seeing part of the list; cached, so paging doesn't recompute it
+- Risk factor year-over-year comparison done in code, sorted most novel first, with totals and paging so the model knows when it's seeing part of the list; cached, so paging doesn't recompute it; if the model stops on a cut-off page, the answer gets a note with the totals
 - Company comparisons report how far apart the fiscal years end, and tell the model to say so past six months
 - Filing search defaults to the latest 10-K and drops passages repeated from the prior year
 - Every figure in the answer checked against the tool results by kind and value (so a $B/$M slip or a % read as $ is caught, and rounding isn't); any not found are listed in a note at the end of the answer
@@ -79,7 +79,7 @@ Full answers: [EXAMPLES.md](EXAMPLES.md).
 - A database connection is held only while a tool runs, never while waiting on the model
 
 **Quality**
-- 91 tests (unit tests without a database; API tests against the snapshot in Postgres, including `/ask` over HTTP with a fake model)
+- 96 tests (unit tests without a database; API tests against the snapshot in Postgres, including `/ask` over HTTP with a fake model)
 - A live evaluation, `pytest -m live`: the brief's six questions against the configured real model, checking route, tools, figures and the decline
 - Typed end to end: SQL rows map into Pydantic models, and mypy runs clean
 - `scripts/check.py`: lint, formatting, types, tests

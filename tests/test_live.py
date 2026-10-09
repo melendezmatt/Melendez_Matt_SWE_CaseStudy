@@ -8,6 +8,7 @@ follow the data. They're deselected by default (see pyproject.toml): they cost A
 model can phrase an answer in ways a check doesn't anticipate. Read a failure before trusting it.
 """
 
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
@@ -59,6 +60,7 @@ class Case:
     figures: Callable[[psycopg.Connection], set[str]] | None = None  # must all appear in the answer
     mentions: list[str] = field(default_factory=list)  # some phrase from each group must appear
     fully_grounded: bool = True  # every figure in the answer must be found in a tool result
+    or_paged: bool = False  # `mentions` is also satisfied by calling a tool again for its next page
 
 
 CASES = [
@@ -80,8 +82,12 @@ CASES = [
         "What new risk factors did NVDA add in its latest 10-K versus the prior year?",
         "filings",
         {"risk_factor_changes"},
-        # NVDA has more new paragraphs than one call returns; the answer must not claim it's complete.
-        mentions=["of 31|largest|most significant|selection|some of|not exhaustive|partial|offset|all 31"],
+        # NVDA has more new paragraphs than one call returns. Acceptable: the model pages through
+        # them all, or says the answer is partial, or the agent's appended note says so for it.
+        mentions=[
+            "of 31|largest|most significant|selection|some of|not exhaustive|partial|ask for more|all 31"
+        ],
+        or_paged=True,
         fully_grounded=False,  # quotes figures from 10-K prose, which the check can't always match
     ),
     Case(
@@ -113,7 +119,11 @@ def test_the_brief_questions_with_a_real_model(
     if case.figures:
         missing = case.figures(conn) - numbers_in(text)
         assert not missing, f"expected figures not in the answer: {missing}{context}"
+    calls_per_tool = Counter(c["tool"] for c in answer["tool_calls"])
+    paged = any(n > 1 for n in calls_per_tool.values())
     for group in case.mentions:
+        if case.or_paged and paged:
+            break  # the model read every page, so there was nothing partial to declare
         assert any(phrase.lower() in text.lower() for phrase in group.split("|")), f"none of {group}{context}"
     if case.fully_grounded:
         assert answer["unverified_numbers"] == [], context

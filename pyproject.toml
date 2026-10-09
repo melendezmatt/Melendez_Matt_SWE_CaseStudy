@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fundamentals-tracker"
-version = "0.1.0"
+version = "1.0.0"
 description = "SEC fundamentals, 10-K text and market prices, with a Q&A agent on top"
 requires-python = ">=3.11"
 dependencies = [

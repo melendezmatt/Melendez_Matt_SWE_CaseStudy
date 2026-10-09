@@ -199,6 +199,15 @@ def risk_factor_changes(conn: DbConnection, sources: list[SourceRef], ticker: st
         "totals": {name: len(paras) for name, paras in lists.items()},
         "offset": offset,
         "truncated": truncated,
+        # Appended to the answer by the agent if the model stops here without saying the list is
+        # partial (see agent.ask). Written for the reader, not the model.
+        "partial_note": (
+            f"This covers the {offset + PAGE_SIZE} most changed of {len(changes.new)} new, "
+            f"{len(changes.changed)} rewritten and {len(changes.removed)} removed risk factor "
+            f"paragraphs in {changes.ticker}'s latest 10-K; ask for more to see the rest."
+            if truncated
+            else None
+        ),
         "note": (
             "Each list is ordered most changed first. Only part of each list is shown; say so in "
             "the answer, or call again with a higher offset for more."
