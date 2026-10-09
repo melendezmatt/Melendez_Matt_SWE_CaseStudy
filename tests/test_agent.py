@@ -166,6 +166,44 @@ def test_after_the_last_round_the_model_must_answer_without_tools() -> None:
     assert model.requests[-1]["tools"] is None
 
 
+def test_the_model_turn_sent_back_keeps_tool_call_extras_but_drops_provider_fields() -> None:
+    from openai.types.chat import ChatCompletion
+
+    response = ChatCompletion.model_validate(
+        {
+            "id": "r",
+            "object": "chat.completion",
+            "created": 0,
+            "model": "m",
+            "choices": [
+                {
+                    "index": 0,
+                    "finish_reason": "tool_calls",
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "reasoning": "Groq-style extra that Groq rejects when sent back",
+                        "tool_calls": [
+                            {
+                                "id": "c1",
+                                "type": "function",
+                                "function": {"name": "get_valuation", "arguments": '{"ticker": "AAPL"}'},
+                                "extra_content": {"google": {"thought_signature": "sig"}},  # Gemini 3
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+    )
+    model = agent.OpenAICompatible("http://unused", "key", "m")
+    model.client = MagicMock()
+    model.client.chat.completions.create.return_value = response
+    raw = model.complete([], None, timeout=5)["raw"]
+    assert set(raw) == {"role", "tool_calls"}  # content was None; reasoning dropped
+    assert raw["tool_calls"][0]["extra_content"] == {"google": {"thought_signature": "sig"}}
+
+
 def test_no_api_key_means_no_model() -> None:
     settings = MagicMock(llm_api_key="")
     assert agent.model_from_settings(settings) is None

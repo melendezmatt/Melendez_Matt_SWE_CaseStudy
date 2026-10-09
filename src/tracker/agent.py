@@ -30,6 +30,7 @@ from tracker.tools import FILINGS, NUMBERS, TOOLS
 log = logging.getLogger(__name__)
 
 MAX_ROUNDS = 6  # tool-calling rounds before the agent must answer with what it has
+ASSISTANT_FIELDS = ("role", "content", "tool_calls")  # what every OpenAI-compatible API accepts back
 
 SYSTEM_PROMPT = """\
 You answer questions from portfolio managers and analysts about a fixed set of public companies, \
@@ -96,15 +97,18 @@ class OpenAICompatible:
         except openai.APIError as exc:
             raise LLMUnavailable(f"the LLM call failed: {exc}") from exc
         message = response.choices[0].message
+        raw = message.model_dump(exclude_none=True)
         return {
             "text": message.content,
             "tool_calls": [
                 {"id": c.id, "name": c.function.name, "arguments": c.function.arguments}
                 for c in message.tool_calls or []
             ],
-            # Sent back unchanged on the next turn. Providers can attach data the next request
-            # needs: Gemini 3 rejects tool results unless its "thought signatures" come back.
-            "raw": message.model_dump(exclude_none=True),
+            # Sent back on the next turn. Tool calls go back exactly as received: Gemini 3 rejects
+            # tool results unless the "thought signatures" it attaches to each call come back.
+            # Other top-level fields are dropped, because some providers reject the extras they
+            # add themselves (e.g. a `reasoning` field) when they're sent back.
+            "raw": {key: value for key, value in raw.items() if key in ASSISTANT_FIELDS},
         }
 
 

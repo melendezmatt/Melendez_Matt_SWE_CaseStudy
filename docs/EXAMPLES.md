@@ -4,41 +4,42 @@ The brief's six example questions, asked through `POST /ask` with `scripts/ask_e
 the committed snapshot (data as of 2026-10-07). Output is pasted unedited. `route` and `tools` come
 from the tools the agent actually ran, not from the model's text.
 
-Model: Google AI Studio free tier, via its OpenAI-compatible endpoint. The free tier allows about
-20 requests per model per day, so the run was spread across `gemini-3.7-flash` and
-`gemini-3.5-flash` (noted per question). The code and prompts were identical for every run.
+Model: Google AI Studio free tier, `gemini-3.7-flash`, via its OpenAI-compatible endpoint. Run on
+2026-10-08 with the current code: unit-aware number checking, the period-alignment note in
+company comparisons, and linked `source_refs` (not shown here; see the API response). No answer
+had a figure the number check couldn't find in the tool results.
 
 ## 1. What were NVDA's revenue and net income for the last three fiscal years?
 
 `route: numbers   tools: get_fundamentals` · model `gemini-3.7-flash`
 
-NVIDIA’s revenue and net income for the last three fiscal years were:
-
-* **FY2024** (ended January 28, 2024):
-  * **Revenue:** $60.92B
-  * **Net Income:** $29.76B
-
-* **FY2025** (ended January 26, 2025):
-  * **Revenue:** $130.50B
-  * **Net Income:** $72.88B
+NVIDIA's revenue and net income for the last three fiscal years are:
 
 * **FY2026** (ended January 25, 2026):
   * **Revenue:** $215.94B
   * **Net Income:** $120.07B
 
+* **FY2025** (ended January 26, 2025):
+  * **Revenue:** $130.50B
+  * **Net Income:** $72.88B
+
+* **FY2024** (ended January 28, 2024):
+  * **Revenue:** $60.92B
+  * **Net Income:** $29.76B
+
 ## 2. Which of the five companies had the highest gross margin last year?
 
 `route: numbers   tools: compare_companies` · model `gemini-3.7-flash`
 
-**NVIDIA (NVDA)** had the highest gross margin in its latest fiscal year at **71.1%**.
+**NVIDIA (NVDA)** had the highest gross margin last year (in its latest fiscal year) at **71.1%**.
 
-Note that fiscal years end on different dates for each company:
+Note that fiscal year-end dates differ across the five companies (spanning up to 276 days apart):
 
-1. **NVDA** (FY2026, period ended 2026-01-25): **71.1%**
-2. **MSFT** (FY2026, period ended 2026-06-30): **67.9%**
-3. **GOOGL** (FY2025, period ended 2025-12-31): **59.7%**
-4. **AAPL** (FY2025, period ended 2025-09-27): **46.9%**
-5. **ETN** (FY2025, period ended 2025-12-31): **37.6%**
+1. **NVDA**: 71.1% (FY2026 ended 2026-01-25)
+2. **MSFT**: 67.9% (FY2026 ended 2026-06-30)
+3. **GOOGL**: 59.7% (FY2025 ended 2025-12-31)
+4. **AAPL**: 46.9% (FY2025 ended 2025-09-27)
+5. **ETN**: 37.6% (FY2025 ended 2025-12-31)
 
 ## 3. What is AAPL's trailing P/E right now?
 
@@ -46,89 +47,92 @@ Note that fiscal years end on different dates for each company:
 
 Apple's (AAPL) trailing P/E is **45.1x**.
 
-* **Latest Closing Price:** $336.67 (as of 2026-10-07)
+* **Latest Close Price:** $336.67 (as of 2026-10-07)
 * **Latest Annual Diluted EPS:** $7.46 (FY2025, year ended 2025-09-27)
 
 ## 4. What new risk factors did NVDA add in its latest 10-K versus the prior year?
 
-`route: filings   tools: risk_factor_changes` · model `gemini-3.7-flash`
+`route: filings   tools: risk_factor_changes, risk_factor_changes` · model `gemini-3.7-flash`
 
-In its **FY2026 10-K** (compared to the FY2025 10-K), NVIDIA added several new risk factors and specific disclosures across the following areas:
+In its **FY2026 10-K** (compared to the FY2025 10-K), NVIDIA added **31 new risk factor paragraphs** (along with 28 rewritten and 20 removed paragraphs). 
 
----
-
-### 1. China Export Controls, Foreclosure from China Data Center Market, and Product Charges
-* **H20 Licensing Requirement & $4.5B Charge:** In April 2025, the U.S. government (USG) required export licenses for shipments of H20 integrated circuits (and equivalent bandwidth chips) to China/D:5 countries, causing demand to diminish and resulting in a **$4.5 billion charge** in Q1 FY2026 for excess inventory and purchase obligations.
-* **H20 Licensing Revenue & USG Expectations:** In August 2025, the USG granted licenses to ship certain H20 products to select China-based customers (generating ~$60 million in revenue). USG officials expressed an uncodified expectation that the USG receive 15% or more of revenue from licensed sales.
-* **H200 Licensing & Tariffs:** In February 2026, the USG granted a license to ship small amounts of H200 chips to specific China customers, requiring U.S. inspection and subjecting shipments to a **25% tariff** upon importation into the United States.
-* **Effective Foreclosure from China Data Center Market:** NVIDIA stated that as of the end of FY2026, it is effectively foreclosed from competing in China’s data center computing market under current rules, which has helped competitors build larger developer and customer ecosystems to challenge NVIDIA globally.
-* **Worldwide & Downstream Export Controls:** Expanded controls targeting AI GPUs and semiconductors could restrict downstream users, Cloud Service Providers (CSPs), and NVIDIA AI cloud services outside of China.
+The primary new risk factors added cover the following key areas:
 
 ---
 
-### 2. Commercial Arrangements, Counterparty Risks, and Financing Requests
-* NVIDIA added risks concerning commercial arrangements, including long-term capacity purchase obligations and financial guarantees.
-* The company noted it has been asked to offer financing arrangements to support customer and partner datacenter infrastructure buildouts (though it stated it has not entered into any financing arrangements). Such arrangements carry counterparty credit risk, project delays, and potential cash flow impacts.
+### 1. AI Infrastructure, Energy, and Capital Constraints
+* **Energy, Datacenter, and Capital Shortages:** NVIDIA added a new risk noting that the availability of data centers, energy, and capital to support customer and partner buildouts of NVIDIA AI infrastructure is critical. It emphasized that expanding energy capacity is a complex, multi-year process with regulatory, technical, and construction challenges, and capital constraints could delay customer deployments or reduce the scale of AI adoption.
 
----
+### 2. Strategic Transactions & Partnerships
+* **OpenAI Investment and Partnership:** NVIDIA disclosed: *"We are finalizing an investment and partnership agreement with OpenAI. There is no assurance that we will enter into an investment and partnership agreement with OpenAI or that a transaction will be completed."*
+* **Groq IP Licensing Agreement:** NVIDIA disclosed that it entered into an intellectual property license arrangement with **Groq, Inc.** that required significant nonrefundable payments, citing risks that integrating the technology into product roadmaps may be delayed, unsuccessful, or fail to achieve commercial returns.
 
-### 3. IP License Agreement with Groq, Inc.
-* NVIDIA disclosed that it entered into an intellectual property license arrangement with **Groq, Inc.** that required significant, nonrefundable payments.
-* Risks include the significant engineering effort required to incorporate the technology into product roadmaps, potential delays or failure to achieve customer adoption, and the risk of failing to recover costs or realize an adequate return.
+### 3. Customer Financing and Counterparty Risks
+* **Datacenter Financing and Guarantees:** NVIDIA added risks regarding commercial arrangements—including long-term capacity purchase obligations and financial guarantees—and noted it has been asked to offer financing arrangements to support customer datacenter buildouts (though it had not entered into financing arrangements to date). These arrangements expose the company to counterparty risk, project delays, distress, or credit risk.
 
----
+### 4. U.S. Export Controls, Tariffs, and China Market Foreclosure
+NVIDIA substantially expanded its disclosures regarding U.S. government (USG) export controls and China:
+* **H20 License Requirements & $4.5 Billion Inventory Charge:** In April 2025, the USG required licenses for exports of H20 chips to China/D:5 countries, resulting in a **$4.5 billion charge** in Q1 FY2026 for excess inventory and purchase obligations. In August 2025, licenses were granted under which NVIDIA generated ~$60 million in H20 revenue, with USG officials expressing an expectation to receive 15% or more of revenue generated from licensed sales (unaccompanied by codified regulations).
+* **H200 Licensing and 25% U.S. Tariff:** In February 2026, the USG granted a license to ship small amounts of H200 products to specific China-based customers requiring U.S. inspection, subjecting shipments to a **25% tariff** upon importation into the U.S.
+* **Effective Foreclosure from China Data Center Market:** NVIDIA stated that as of the end of FY2026, it was *"effectively foreclosed from competing in China's data center computing/compute market,"* which has helped competitors build larger developer and customer ecosystems to challenge NVIDIA worldwide.
+* **Regulatory Changes and the GAIN AI Act:** Management noted the USG announced in May 2025 it would rescind the AI Diffusion Interim Final Rule (IFR) and implement a replacement rule, and highlighted the Senate's passage in October 2025 of the "GAIN AI Act" in the NDAA.
+* **Open-Source Chinese Models:** Added risks concerning potential regulatory controls limiting NVIDIA's ability to support applications built on Chinese foundation models, specifically naming **DeepSeek, Qwen, and KIMMI**.
+* **Chip Tracking / Throttling Mandates:** USG proposals or conditions requiring chip tracking and throttling mechanisms, as well as China’s government questioning whether H20 chips contain built-in vulnerabilities.
+* **Export Control Compliance Allegations:** Risks that unsubstantiated allegations claiming NVIDIA complies with the letter but not the "spirit" of export controls, or exploits supposed "loopholes," could harm reputation and customer relationships.
 
-### 4. Constraints on Customer Datacenter Infrastructure: Energy, Capital, and Facilities
-* NVIDIA highlighted risks regarding customers’ and partners’ ability to secure **energy, capital, and data center space** in a timely manner.
-* Expanding power/energy capacity involves complex, multi-year regulatory and construction challenges, and capital constraints could slow AI infrastructure deployments.
+### 5. Domestic Manufacturing Scaling
+* **U.S.-Based Manufacturing Expansion:** NVIDIA noted it is increasing U.S.-based manufacturing and investing in specialized equipment and processes, exposing it to risks of delays, scaling challenges, and reliance on the domestic manufacturing ecosystem's capacity.
 
----
-
-### 5. Domestic (U.S.) Manufacturing Expansion
-* NVIDIA noted it is increasing its U.S.-based manufacturing and investing in specialized domestic production equipment and processes, subject to risks of scaling delays, execution challenges, and the domestic ecosystem's capacity to ramp supply.
-
----
-
-### 6. Strategic Investments and OpenAI Agreement
-* **OpenAI Agreement:** NVIDIA disclosed that it is finalizing an investment and partnership agreement with **OpenAI**, noting there is no assurance that the agreement will be entered into or that a transaction will be completed.
-* **Investment Portfolio Risks:** General risks around non-marketable, illiquid investments in early-stage ecosystem companies, portfolio industry sector concentration, and potential impairment losses.
-
----
-
-### 7. AI-Enhanced Cyber-Attacks
-* Added risks that threat actors, including nation-states and sophisticated organizations, are using AI technology to launch more automated, targeted, and coordinated cyber-attacks.
+### 6. Investment Portfolio Risks
+* **Concentration in Ecosystem Investments:** Added risks regarding industry sector concentration within its investment portfolio, noting that declines in specific sectors could increase impairment losses from investments in private and early-stage companies.
 
 ## 5. How did MSFT's revenue grow last year, and what did management attribute it to?
 
-`route: both   tools: get_fundamentals, search_filings, search_filings` · model `gemini-3.5-flash`
+`route: both   tools: get_fundamentals, search_filings` · model `gemini-3.7-flash`
 
-In fiscal year 2026 (ended June 30, 2026), Microsoft’s revenue grew to **$331.84 billion** (reported as $331,839 million in the 10-K), representing a **17.8%** (or 18% rounded) increase year-over-year from $281.72 billion ($281,724 million) in FY2025.
+In its latest fiscal year (FY2026, ended June 30, 2026), Microsoft's revenue was **$331.84B**, representing year-over-year growth of **17.8%** (compared to $281.72B in FY2025). 
 
-In its FY2026 10-K MD&A, management attributed the overall revenue increase of $50.1 billion primarily to **growth in Microsoft Cloud**. 
+In the FY2026 10-K MD&A, management highlighted that total **Microsoft Cloud revenue increased 27% to $214.4 billion**. Revenue performance across segments was driven by the following:
 
-The segment-level drivers and management's explanations include:
+---
 
-### 1. Intelligent Cloud (Revenue increased $31.5 billion or 30%)
-* **Azure and other cloud services:** Grew **41%**, driven by demand for services across the platform with continued growth across all workloads.
-* **Server products:** Grew **1%**, primarily driven by higher purchases of licenses running in multi-cloud environments, offset in part by the continued customer shift to the cloud.
-* **Enterprise and partner services:** Grew **6%**, driven by growth in Enterprise Support Services.
+### 1. Intelligent Cloud
+**Revenue increased $31.5 billion (30%)**, driven by:
+* **Server products and cloud services:** Increased $31.0 billion (31%), led by **Azure and other cloud services**, which grew **41%** due to demand for services across the platform with continued growth across all workloads.
+* **Server products:** Increased 1%, driven by higher purchases of licenses running in multi-cloud environments, offset in part by the customer shift to cloud.
+* **Enterprise and partner services:** Increased $500 million (6%), driven by growth in Enterprise Support Services.
 
-### 2. Productivity and Business Processes (Revenue increased $19.2 billion or 16%)
-* **Microsoft 365 Commercial products and cloud services:** Grew **16%**. Within this, Microsoft 365 Commercial cloud revenue grew 17%, driven by growth in revenue per user from Microsoft 365 Copilot and Microsoft 365 E5, alongside 6% seat growth (driven by small and medium businesses and frontline worker offerings).
-* **Microsoft 365 Consumer products and cloud services:** Grew **24%**, with cloud revenue up 28% driven by growth in revenue per user and 7% subscriber growth.
-* **LinkedIn:** Grew **11%**, with growth across all lines of business.
-* **Dynamics products and cloud services:** Grew **15%**, driven by Dynamics 365 growth of 18% across all workloads.
+---
 
-### 3. More Personal Computing (Revenue decreased $597 million or 1%)
-This segment partially offset overall growth due to declines in gaming and devices:
-* **XBOX:** Revenue decreased **7%**, driven by a 29% decline in hardware revenue (lower console volumes) and a 5% decline in XBOX content and services (due to a strong prior-year comparable, offset in part by growth in XBOX Game Pass).
-* **Windows and Devices:** Revenue decreased **1%**, driven by a decline in Devices, offset in part by 5% Windows OEM growth.
-* **Search advertising:** Revenue (excluding traffic acquisition costs) increased **12%**, which partially offset the segment's overall decline.
+### 2. Productivity and Business Processes
+**Revenue increased $19.2 billion (16%)** (including a favorable 2% foreign currency impact), driven by:
+* **Microsoft 365 Commercial products and cloud services:** Increased $14.2 billion (16%).
+  * **Microsoft 365 Commercial cloud** grew 17%, driven by growth in revenue per user (spurred by Microsoft 365 Copilot and Microsoft 365 E5) and commercial seat growth of 6% (driven by small and medium businesses and frontline worker offerings).
+  * **Microsoft 365 Commercial products** grew 13%, driven by growth in the Windows Commercial on-premises components of Microsoft 365 suite sales and an increase in Office 2024 transactional purchasing.
+* **Microsoft 365 Consumer products and cloud services:** Increased $1.8 billion (24%), with cloud revenue growing 28% from higher revenue per user and subscriber growth of 7%.
+* **LinkedIn:** Increased $2.0 billion (11%), with growth across all lines of business.
+* **Dynamics products and cloud services:** Increased $1.2 billion (15%), driven by 18% growth in Dynamics 365 across all workloads.
+
+---
+
+### 3. More Personal Computing
+**Revenue decreased $597 million (1%)**, reflecting:
+* **XBOX revenue:** Decreased $1.7 billion (7%), driven by:
+  * A 29% decline in XBOX hardware revenue due to lower console sales volume.
+  * A 5% decline in XBOX content and services revenue against a prior-year comparable that benefited from strong first-party content, offset in part by growth in XBOX Game Pass.
+* **Windows and Devices:** Decreased $230 million (1%), as device declines were partially offset by 5% growth in Windows OEM.
+* **Search advertising:** Partially offset these declines, increasing $1.3 billion (9%), or 12% excluding traffic acquisition costs, driven by higher search volume, revenue per search, and third-party partnerships.
 
 ## 6. What is the company's forward guidance for next quarter?
 
 `route: none   tools: none` · model `gemini-3.7-flash`
 
-Forward guidance, quarterly forecasts, and future quarterly outlooks are not available in the provided dataset. The available data is limited to historical annual SEC 10-K filings (reported financials, Item 1A Risk Factors, and Item 7 MD&A) and closing stock prices for Apple (AAPL), Eaton (ETN), Alphabet (GOOGL), Microsoft (MSFT), and NVIDIA (NVDA).
+Forward guidance and next-quarter outlook are not available. The available data is strictly from annual SEC 10-K filings (MD&A and Risk Factors), reported annual financial metrics, and daily closing prices for covered companies (AAPL, ETN, GOOGL, MSFT, and NVDA).
 
-Instead, I can provide historical annual financial performance (such as revenue, net income, margins, and year-over-year growth), trailing P/E valuations, or management's discussion of past performance and risk factors from their annual 10-K reports. Please let me know which company and historical metrics you would like to examine.
+Instead, I can provide:
+- Reported historical annual financials (revenue, gross profit, operating income, net income, diluted EPS, margins, and year-over-year growth)
+- Trailing P/E valuations
+- Management discussion and analysis (MD&A) of past annual performance and drivers
+- Item 1A Risk Factors disclosures and year-over-year risk changes
+
+If you have a specific covered company and historical metric or filing topic in mind, please let me know!

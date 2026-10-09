@@ -1,7 +1,46 @@
 # Design writeup
 
-How it's built, why, and what each decision costs. The [README](../README.md) covers running it;
-[MVP.md](MVP.md) maps each requirement to the code.
+The first section is the writeup the brief asks for, on one page. The sections after it are the
+detail behind each point, for a reviewer who wants it. The [README](../README.md) covers running
+it; [MVP.md](MVP.md) maps each requirement to the code.
+
+## Summary
+
+**User and goal.** A PM or analyst asking about a small coverage list, for whom a wrong number is
+worse than no answer. So: every number traceable to its SEC filing, no arithmetic by the model, and
+a plain "I don't have that" when the data isn't there.
+
+**Architecture and data model.** Ingestion (`fetch`) pulls SEC XBRL facts, the latest two 10-Ks
+and Yahoo prices, normalizes them into committed snapshot files, and loads Postgres in one
+transaction. Serving shares nothing with ingestion but the database, and `seed` rebuilds it with no
+network, so review doesn't depend on SEC or Yahoo. Fundamentals are stored long (company × metric ×
+period) with the XBRL tag and filing accession on every value; filing text is stored whole and in
+full-text-indexed chunks. Margins, growth and P/E are computed per request in `metrics.py`. The
+REST API and the agent's tools call the same `service.py` functions, so they can't disagree.
+
+**Integrating the sources.** XBRL needed five rules, each from a real defect: full-year facts only,
+latest filing wins (restatements, NVDA's split), fallback tags per year (GOOGL), zero-tagged values
+ignored (ETN), untagged subtotals derived for every year so a series never changes definition.
+10-K sections are cut between "Item" headings, taking the longest span to skip the table of
+contents. The cross-source join is trailing P/E: latest Yahoo close ÷ latest annual diluted EPS,
+both on a split-adjusted basis, returned with the price date and the EPS filing.
+
+**Where the LLM is, and isn't.** The model routes (number tools, filing tools, both, or none),
+fills in tool arguments and writes the answer. Code does everything that has to be exact: all
+math, number formatting, the year-over-year risk-factor diff, the reported `route` and linked
+`source_refs`, and a check of every figure in the answer against the tool results by kind and
+value, with any misses listed in the answer itself. Comparisons across companies report how far
+apart their fiscal years end. Any OpenAI-compatible endpoint works; no agent framework.
+
+**Trade-offs and cuts.** Annual data only, so P/E can be a year stale (10-Qs are next). One
+multiple. Keyword search, not embeddings, so the reviewer's proxy needn't serve an embedding
+model. Pattern-based section parsing, checked on these five filers. Figures not found are flagged,
+not blocked. No auth, scheduler, migrations or bonus dataset. The full list, with what each would
+take, is in [MVP.md](MVP.md#deliberately-left-out).
+
+---
+
+The rest of this document is the detail behind the summary.
 
 ## The user and the problem
 
@@ -161,8 +200,10 @@ carried over almost word for word is returned once, from the latest 10-K, rather
 of the six result slots.
 
 **What testing with a real model taught me:** Gemini 3 rejects a follow-up request unless the
-hidden "thought signature" on each tool call is sent back. The loop now returns the provider's
-message exactly as received. The fake model in the unit tests couldn't have caught this. Nor can
+hidden "thought signature" on each tool call is sent back. The loop now returns the tool calls
+exactly as received, but only the standard message fields: other providers add extras of their own
+(Groq's `reasoning`) and reject them when they come back, and a reviewer's proxy could be any of
+them. The fake model in the unit tests couldn't have caught this. Nor can
 it show that routing and declining work, since it's scripted to route. So `pytest -m live` asks a
 real model the brief's six questions and checks the route, the tools, the expected figures (read
 from the service layer, not hard-coded) and that forward guidance is declined with no tool calls.

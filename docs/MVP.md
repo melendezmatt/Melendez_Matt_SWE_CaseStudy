@@ -79,7 +79,7 @@ Full answers: [EXAMPLES.md](EXAMPLES.md).
 - A database connection is held only while a tool runs, never while waiting on the model
 
 **Quality**
-- 90 tests (unit tests without a database; API tests against the snapshot in Postgres, including `/ask` over HTTP with a fake model)
+- 91 tests (unit tests without a database; API tests against the snapshot in Postgres, including `/ask` over HTTP with a fake model)
 - A live evaluation, `pytest -m live`: the brief's six questions against the configured real model, checking route, tools, figures and the decline
 - Typed end to end: SQL rows map into Pydantic models, and mypy runs clean
 - `scripts/check.py`: lint, formatting, types, tests

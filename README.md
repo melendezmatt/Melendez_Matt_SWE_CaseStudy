@@ -51,7 +51,7 @@ To add or swap a company, edit `config/universe.yaml` and run the same command.
 ## Running the checks
 
 ```bash
-docker compose run --rm app python scripts/check.py   # lint, formatting, types (mypy), all 90 tests
+docker compose run --rm app python scripts/check.py   # lint, formatting, types (mypy), all 91 tests
 ```
 
 GitHub Actions ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) does the same on every
@@ -87,8 +87,9 @@ push from a clean machine: `docker compose up --build`, wait for `/health`, call
 `docker compose up -d`. No code changes are needed.
 
 **Provider and model I used:** Google AI Studio (free tier), `gemini-3.7-flash`, through its
-OpenAI-compatible endpoint. The free tier allows about 20 requests per model per day, so one of the six
-example questions was run on `gemini-3.5-flash` instead (noted in [`docs/EXAMPLES.md`](docs/EXAMPLES.md)).
+OpenAI-compatible endpoint. All six example questions in [`docs/EXAMPLES.md`](docs/EXAMPLES.md) were
+answered by that model. The free tier allows about 20 requests per model per day, so
+`scripts/ask_examples.py --pause 65` spaces the questions out.
 
 ## Using the API
 
@@ -136,10 +137,10 @@ curl localhost:8000/ask -H 'Content-Type: application/json' \
 
 `route: both`, using `get_fundamentals` and `search_filings`:
 
-> In fiscal year 2026 (ended June 30, 2026), Microsoft's revenue grew to **$331.84 billion** …
-> a **17.8%** increase year-over-year … In its FY2026 10-K MD&A, management attributed the overall
-> revenue increase of $50.1 billion primarily to **growth in Microsoft Cloud** … Azure and other
-> cloud services grew **41%** …
+> In its latest fiscal year (FY2026, ended June 30, 2026), Microsoft's revenue was **$331.84B**,
+> representing year-over-year growth of **17.8%** … In the FY2026 10-K MD&A, management highlighted
+> that total **Microsoft Cloud revenue increased 27% to $214.4 billion** … led by **Azure and other
+> cloud services**, which grew **41%** …
 
 ### Example: a question it should decline
 
@@ -150,8 +151,8 @@ curl localhost:8000/ask -H 'Content-Type: application/json' \
 
 `route: none`, no tools called:
 
-> Forward guidance, quarterly forecasts, and future quarterly outlooks are not available in the
-> provided dataset. … Instead, I can provide historical annual financial performance …
+> Forward guidance and next-quarter outlook are not available. The available data is strictly from
+> annual SEC 10-K filings … Instead, I can provide: reported historical annual financials …
 
 All six of the brief's questions, unedited: [`docs/EXAMPLES.md`](docs/EXAMPLES.md). To run them
 yourself: `python scripts/ask_examples.py --base-url http://localhost:8000`.
