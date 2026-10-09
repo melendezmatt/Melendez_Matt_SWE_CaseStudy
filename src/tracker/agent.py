@@ -204,8 +204,10 @@ def run_tool(pool: ConnectionPool, sources: list[SourceRef], name: str, argument
     if name not in TOOLS:
         return {"error": f"there is no tool called {name}"}, False
     try:
+        # A null argument means "not given": drop it so the tool's own default applies.
+        given = {key: value for key, value in json.loads(arguments or "{}").items() if value is not None}
         with pool.connection() as conn:
-            return TOOLS[name].run(conn, sources, **json.loads(arguments or "{}")), True
+            return TOOLS[name].run(conn, sources, **given), True
     except (AppError, ValueError, TypeError) as exc:  # bad arguments or missing data, not bugs
         log.info("tool %s failed: %s", name, exc)
         return {"error": str(exc)}, False

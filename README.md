@@ -91,6 +91,13 @@ OpenAI-compatible endpoint. All six example questions in [`docs/EXAMPLES.md`](do
 answered by that model. The free tier allows about 20 requests per model per day, so
 `scripts/ask_examples.py --pause 65` spaces the questions out.
 
+**Also verified on other providers** with `pytest -m live` (same code, only the three `LLM_`
+variables changed): Groq `openai/gpt-oss-120b` and OpenRouter `nvidia/nemotron-3-super-120b-a12b:free`.
+Testing on them found two portability bugs that Gemini had tolerated: optional tool parameters had
+to allow `null` (Groq validates arguments against the schema), and `$60.92 B` with a space wasn't
+recognised as a figure. Groq's free tier caps requests at 8,000 tokens per minute, which the
+risk-factor comparison exceeds; its paid tier and the other providers handle it.
+
 ## Using the API
 
 | Method | Path | Returns |

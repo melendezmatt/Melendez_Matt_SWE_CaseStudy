@@ -29,7 +29,7 @@ NUMBER = re.compile(
     r"(?<![\w.:])(?P<dollar>\$\s?)?(?P<number>\d[\d,]*(?:\.\d+)?)"
     r"(?:(?P<percent>\s?%|(?i:\s+percent(?:age\s+points?)?)\b)"
     r"|(?P<multiple>x)\b"
-    r"|(?P<scale>[KMBT]\b|(?i:\s+(?:thousand|million|billion|trillion))\b))?"
+    r"|(?P<scale>\s?[KMBT]\b|(?i:\s+(?:thousand|million|billion|trillion))\b))?"
 )
 SCALES = {
     "k": 1e3,

@@ -39,6 +39,11 @@ def test_restating_a_figure_in_other_units_or_rounding_it_is_not_flagged() -> No
     assert unverified_numbers(answer, evidence) == []
 
 
+def test_a_space_before_the_scale_letter_is_the_same_figure() -> None:
+    # A Groq model wrote a table of "$60.92 B" cells; every one was flagged until this was fixed.
+    assert unverified_numbers("| 2025 | $130.50 B | $7.46 | 71.1 % |", [TOOL_RESULT]) == []
+
+
 def test_a_bare_number_matches_a_10k_table_in_millions() -> None:
     mdna = "(In millions) Revenue 331,839 281,724"
     assert unverified_numbers("Revenue was $331,839 million.", [mdna]) == []

@@ -120,3 +120,12 @@ def test_risk_factor_citations_link_to_both_10ks() -> None:
     sources: list[SourceRef] = []
     tools.risk_factor_changes(None, sources, "NVDA")  # type: ignore[arg-type]
     assert [(s.accession, s.url) for s in sources] == [("a2", "u2"), ("a1", "u1")]
+
+
+def test_optional_parameters_accept_null_in_the_schema() -> None:
+    # Models send `"fiscal_year": null` for "not given"; Groq validates arguments against the
+    # schema and rejected the whole call until optional parameters allowed null.
+    params = tools.TOOLS["compare_companies"].schema["function"]["parameters"]
+    assert params["properties"]["metric"]["type"] == "string"  # required: unchanged
+    assert params["properties"]["fiscal_year"]["type"] == ["integer", "null"]
+    assert params["properties"]["calendar_year"]["type"] == ["integer", "null"]

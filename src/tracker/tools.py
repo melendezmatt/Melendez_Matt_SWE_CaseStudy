@@ -224,7 +224,15 @@ class Tool:
 
     @property
     def schema(self) -> dict:
-        """The OpenAI-style function definition sent to the model."""
+        """The OpenAI-style function definition sent to the model.
+
+        Optional parameters also accept null. Models often send `"fiscal_year": null` to mean "not
+        given", and providers that validate arguments against the schema before returning the call
+        (Groq does) reject the whole call unless the schema allows it."""
+        properties = {
+            name: spec if name in self.required else {**spec, "type": [spec["type"], "null"]}
+            for name, spec in self.parameters.items()
+        }
         return {
             "type": "function",
             "function": {
@@ -232,7 +240,7 @@ class Tool:
                 "description": self.description,
                 "parameters": {
                     "type": "object",
-                    "properties": self.parameters,
+                    "properties": properties,
                     "required": list(self.required),
                 },
             },

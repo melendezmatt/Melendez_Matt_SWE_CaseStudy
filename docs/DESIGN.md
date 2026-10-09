@@ -209,6 +209,15 @@ real model the brief's six questions and checks the route, the tools, the expect
 from the service layer, not hard-coded) and that forward guidance is declined with no tool calls.
 Unedited answers from a real model are in [EXAMPLES.md](EXAMPLES.md).
 
+**A second and third provider found what the first couldn't.** Running the same six questions on
+Groq and OpenRouter turned up two bugs Gemini had masked: models send `"fiscal_year": null` for
+"not given", and Groq validates arguments against the tool schema before returning the call, so
+every optional parameter now allows null; and a model that writes `$60.92 B` with a space had every
+figure in a correct answer flagged, because the number pattern only accepted a glued `B`. Both are
+one-line fixes with tests, but neither was findable from a single provider. The remaining
+provider-specific limit is Groq's free tier, 8,000 tokens per minute, which the risk-factor page
+exceeds; the other five questions pass there.
+
 ## Trade-offs and cuts
 
 | Decision | Cost |

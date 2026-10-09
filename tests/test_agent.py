@@ -204,6 +204,13 @@ def test_the_model_turn_sent_back_keeps_tool_call_extras_but_drops_provider_fiel
     assert raw["tool_calls"][0]["extra_content"] == {"google": {"thought_signature": "sig"}}
 
 
+def test_a_null_argument_means_use_the_tools_default() -> None:
+    # `numbers` takes no optional arguments, so `years=None` would be a TypeError if passed through.
+    model = FakeModel(calls("numbers", arguments='{"years": null}'), says("done"))
+    result = agent.ask(model, FakePool(), "question")
+    assert [c.ok for c in result.tool_calls] == [True]
+
+
 def test_no_api_key_means_no_model() -> None:
     settings = MagicMock(llm_api_key="")
     assert agent.model_from_settings(settings) is None
